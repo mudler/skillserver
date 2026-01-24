@@ -3,6 +3,7 @@ package git
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,6 +20,8 @@ type GitSyncer struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	onUpdate  func() error // Callback to trigger re-indexing
+	progress  io.Writer    // Writer for git progress output (nil = disabled)
+	logger    io.Writer    // Writer for log messages (nil = disabled)
 }
 
 // NewGitSyncer creates a new GitSyncer
@@ -30,7 +33,19 @@ func NewGitSyncer(skillsDir string, repos []string, onUpdate func() error) *GitS
 		ctx:       ctx,
 		cancel:    cancel,
 		onUpdate:  onUpdate,
+		progress:  nil, // Default to no progress output (to avoid interfering with MCP stdio)
+		logger:    nil, // Default to no logging
 	}
+}
+
+// SetProgressWriter sets the writer for git progress output
+func (g *GitSyncer) SetProgressWriter(w io.Writer) {
+	g.progress = w
+}
+
+// SetLogger sets the writer for log messages
+func (g *GitSyncer) SetLogger(w io.Writer) {
+	g.logger = w
 }
 
 // Start begins the Git synchronization process
@@ -55,8 +70,10 @@ func (g *GitSyncer) Stop() {
 func (g *GitSyncer) syncAll() error {
 	for _, repoURL := range g.repos {
 		if err := g.syncRepo(repoURL); err != nil {
-			// Log error but continue with other repos
-			fmt.Printf("Warning: failed to sync repo %s: %v\n", repoURL, err)
+			// Log error but continue with other repos (only if logger is set)
+			if g.logger != nil {
+				fmt.Fprintf(g.logger, "Warning: failed to sync repo %s: %v\n", repoURL, err)
+			}
 		}
 	}
 
@@ -93,7 +110,7 @@ func (g *GitSyncer) syncRepo(repoURL string) error {
 func (g *GitSyncer) cloneRepo(repoURL, targetDir string) error {
 	_, err := git.PlainClone(targetDir, false, &git.CloneOptions{
 		URL:      repoURL,
-		Progress: os.Stdout,
+		Progress: g.progress, // Use progress writer (nil = no output)
 	})
 	if err != nil {
 		// Handle authentication errors gracefully
@@ -118,7 +135,7 @@ func (g *GitSyncer) pullRepo(repoDir string) error {
 	}
 
 	err = w.Pull(&git.PullOptions{
-		Progress: os.Stdout,
+		Progress: g.progress, // Use progress writer (nil = no output)
 	})
 	if err != nil {
 		if err == git.NoErrAlreadyUpToDate {

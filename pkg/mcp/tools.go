@@ -26,7 +26,7 @@ type SkillInfo struct {
 
 // ReadSkillInput is the input for read_skill tool
 type ReadSkillInput struct {
-	Filename string `json:"filename" jsonschema:"required,description=The name of the skill file (without .md extension)"`
+	Filename string `json:"filename" jsonschema:"The name of the skill file (without .md extension)"`
 }
 
 // ReadSkillOutput is the output for read_skill tool
@@ -36,7 +36,7 @@ type ReadSkillOutput struct {
 
 // SearchSkillsInput is the input for search_skills tool
 type SearchSkillsInput struct {
-	Query string `json:"query" jsonschema:"required,description=The search query"`
+	Query string `json:"query" jsonschema:"The search query"`
 }
 
 // SearchSkillsOutput is the output for search_skills tool

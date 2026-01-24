@@ -23,11 +23,15 @@ type Server struct {
 }
 
 // NewServer creates a new web server
-func NewServer(skillManager domain.SkillManager, gitRepos []string) *Server {
+func NewServer(skillManager domain.SkillManager, gitRepos []string, enableLogging bool) *Server {
 	e := echo.New()
+	e.HideBanner = true
 
 	// Middleware
-	e.Use(middleware.RequestLogger())
+	// Only enable request logging if explicitly enabled (to avoid interfering with MCP stdio)
+	if enableLogging {
+		e.Use(middleware.RequestLogger())
+	}
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORS())
 

@@ -36,6 +36,7 @@ SkillServer supports both **environment variables** and **command-line flags**. 
 | `SKILLSERVER_DIR` | `SKILLS_DIR` | `./skills` | Directory to store skills |
 | `SKILLSERVER_PORT` | `PORT` | `8080` | Port for the web server |
 | `SKILLSERVER_GIT_REPOS` | `GIT_REPOS` | (empty) | Comma-separated Git repository URLs |
+| `SKILLSERVER_ENABLE_LOGGING` | (none) | `false` | Enable logging to stderr (default: false to avoid interfering with MCP stdio) |
 
 ### Command-Line Flags
 
@@ -44,6 +45,7 @@ SkillServer supports both **environment variables** and **command-line flags**. 
 | `--dir` | Directory to store skills (overrides `SKILLSERVER_DIR` or `SKILLS_DIR`) |
 | `--port` | Port for the web server (overrides `SKILLSERVER_PORT` or `PORT`) |
 | `--git-repos` | Comma-separated list of Git repository URLs (overrides `SKILLSERVER_GIT_REPOS` or `GIT_REPOS`) |
+| `--enable-logging` | Enable logging to stderr (overrides `SKILLSERVER_ENABLE_LOGGING`). Default: false (disabled to avoid interfering with MCP stdio protocol) |
 
 ## Usage
 
@@ -64,6 +66,12 @@ export SKILLSERVER_PORT=9090
 # Using both (flags override env vars)
 export SKILLSERVER_PORT=8080
 ./skillserver --port 9090  # Will use 9090
+
+# Enable logging (useful for debugging, but disabled by default to avoid interfering with MCP stdio)
+./skillserver --enable-logging
+# Or using environment variable
+export SKILLSERVER_ENABLE_LOGGING=true
+./skillserver
 ```
 
 ### With Git Synchronization
