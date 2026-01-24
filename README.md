@@ -103,6 +103,143 @@ docker run -p 8080:8080 \
   --dir /app/skills --port 8080 --git-repos "https://github.com/user/repo.git"
 ```
 
+## MCP Client Configuration
+
+SkillServer runs as an MCP server over stdio, making it compatible with any MCP client. Here are configuration examples for popular clients:
+
+**Note:** When using SkillServer as an MCP server, logging is disabled by default to avoid interfering with the stdio protocol. Enable it only for debugging purposes.
+
+### Wiz
+
+Add SkillServer to your Wiz configuration file (typically `~/.config/wiz/config.yaml` or similar):
+
+```yaml
+mcp_servers:
+  skillserver:
+    command: docker
+    args:
+      - "run"
+      - "-i"
+      - "--rm"
+      - "-v"
+      - "/host/path/to/skills:/app/skills"
+      - "ghcr.io/mudler/skillserver:latest"
+    env:
+      SKILLSERVER_DIR: "/app/skills"
+      SKILLSERVER_PORT: "9090"
+      # Optional: Git repositories to sync
+      # SKILLSERVER_GIT_REPOS: "https://github.com/user/repo.git"
+      # Enable logging for debugging (default: false, disabled to avoid interfering with MCP stdio)
+      # SKILLSERVER_ENABLE_LOGGING: "true"
+```
+
+### LocalAI
+
+Add SkillServer to your LocalAI MCP configuration (typically in your LocalAI config file):
+
+```yaml
+mcp:
+  stdio: |
+    {
+      "mcpServers": {
+        "skillserver": {
+          "command": "docker",
+          "args": [
+            "run", "-i", "--rm",
+            "-v", "/host/path/to/skills:/app/skills",
+            "-e", "SKILLSERVER_DIR=/app/skills",
+            "-e", "SKILLSERVER_PORT=9090",
+            "ghcr.io/mudler/skillserver:latest"
+          ]
+        }
+      }
+    }
+```
+
+With Git synchronization:
+
+```yaml
+mcp:
+  stdio: |
+    {
+      "mcpServers": {
+        "skillserver": {
+          "command": "docker",
+          "env": {
+            "SKILLSERVER_DIR": "/app/skills",
+            "SKILLSERVER_PORT": "9090",
+            "SKILLSERVER_GIT_REPOS": "https://github.com/user/repo.git"
+          },
+          "args": [
+            "run", "-i", "--rm",
+            "-v", "/host/path/to/skills:/app/skills",
+            "-e", "SKILLSERVER_DIR",
+            "-e", "SKILLSERVER_PORT",
+            "-e", "SKILLSERVER_GIT_REPOS",
+            "ghcr.io/mudler/skillserver:latest"
+          ]
+        }
+      }
+    }
+```
+
+### Claude Desktop
+
+Add SkillServer to your Claude Desktop MCP configuration (typically `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS or `%APPDATA%\Claude\claude_desktop_config.json` on Windows):
+
+```json
+{
+  "mcpServers": {
+    "skillserver": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-v", "/host/path/to/skills:/app/skills",
+        "ghcr.io/mudler/skillserver:latest"
+      ],
+      "env": {
+        "SKILLSERVER_DIR": "/app/skills",
+        "SKILLSERVER_PORT": "9090",
+        "SKILLSERVER_GIT_REPOS": "https://github.com/user/repo.git"
+      }
+    }
+  }
+}
+```
+
+### Cline / Other MCP Clients
+
+Most MCP clients support stdio-based servers. Configure SkillServer using Docker:
+
+```yaml
+# Generic MCP client configuration
+mcp_servers:
+  skillserver:
+    command: docker
+    args:
+      - "run"
+      - "-i"
+      - "--rm"
+      - "-v"
+      - "/host/path/to/skills:/app/skills"
+      - "ghcr.io/mudler/skillserver:latest"
+    env:
+      SKILLSERVER_DIR: "/app/skills"
+      SKILLSERVER_PORT: "9090"
+```
+
+**Using the binary directly** (if you prefer not to use Docker):
+
+```yaml
+mcp_servers:
+  skillserver:
+    command: /path/to/skillserver
+    args: []  # Optional command-line arguments
+    env:      # Optional environment variables
+      SKILLSERVER_DIR: "/path/to/skills"
+      SKILLSERVER_PORT: "9090"
+```
+
 ## API Endpoints
 
 ### REST API
