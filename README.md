@@ -109,7 +109,7 @@ SkillServer runs as an MCP server over stdio, making it compatible with any MCP 
 
 **Note:** When using SkillServer as an MCP server, logging is disabled by default to avoid interfering with the stdio protocol. Enable it only for debugging purposes.
 
-### Wiz
+### [Wiz](https://github.com/mudler/wiz)
 
 Add SkillServer to your Wiz configuration file (typically `~/.config/wiz/config.yaml` or similar):
 
@@ -133,9 +133,9 @@ mcp_servers:
       # SKILLSERVER_ENABLE_LOGGING: "true"
 ```
 
-### LocalAI
+### [LocalAI](https://github.com/mudler/LocalAI)
 
-Add SkillServer to your LocalAI MCP configuration (typically in your LocalAI config file):
+Add SkillServer to your LocalAI MCP configuration (typically in your LocalAI model config file):
 
 ```yaml
 mcp:
