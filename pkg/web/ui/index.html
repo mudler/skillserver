@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SkillServer</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        header h1 {
+            font-size: 2em;
+            color: #2563eb;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .search-bar {
+            margin-bottom: 20px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .search-input:focus {
+            border-color: #2563eb;
+        }
+
+        .skills-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .skill-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .skill-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+
+        .skill-card h3 {
+            margin-bottom: 10px;
+            color: #2563eb;
+            font-size: 1.3em;
+        }
+
+        .skill-description {
+            color: #666;
+            margin-bottom: 15px;
+            font-size: 0.9em;
+        }
+
+        .skill-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-bottom: 15px;
+        }
+
+        .tag {
+            background: #e0e7ff;
+            color: #4338ca;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+
+        .skill-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+
+        .btn-primary {
+            background: #2563eb;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1d4ed8;
+        }
+
+        .btn-secondary {
+            background: #6b7280;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #4b5563;
+        }
+
+        .btn-danger {
+            background: #dc2626;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #b91c1c;
+        }
+
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .empty-state {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 60px 20px;
+            color: #9ca3af;
+        }
+
+        .editor {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+
+        .editor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        .editor-header h2 {
+            color: #2563eb;
+        }
+
+        .editor-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .skill-name-input {
+            padding: 8px 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .skill-name-input:focus {
+            border-color: #2563eb;
+        }
+
+        .skill-name-input:disabled {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+
+        .editor-textarea {
+            width: 100%;
+            min-height: 500px;
+            padding: 15px;
+            border: 2px solid #e5e7eb;
+            border-radius: 6px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            resize: vertical;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .editor-textarea:focus {
+            border-color: #2563eb;
+        }
+    </style>
+</head>
+<body>
+    <div x-data="skillServer()" x-init="loadSkills()" class="container">
+        <header>
+            <h1>SkillServer</h1>
+            <div class="header-actions">
+                <button @click="showEditor = true; editingSkill = null; skillContent = ''; skillName = ''" class="btn btn-primary">
+                    New Skill
+                </button>
+            </div>
+        </header>
+
+        <!-- Search Bar -->
+        <div class="search-bar">
+            <input 
+                type="text" 
+                x-model="searchQuery" 
+                @input="searchSkills()"
+                placeholder="Search skills..."
+                class="search-input"
+            >
+        </div>
+
+        <!-- Skills List -->
+        <div class="skills-grid" x-show="!showEditor">
+            <template x-for="skill in filteredSkills" :key="skill.name">
+                <div class="skill-card" @click="editSkill(skill)">
+                    <h3 x-text="skill.name"></h3>
+                    <p x-text="skill.description || 'No description'" class="skill-description"></p>
+                    <div class="skill-tags" x-show="skill.tags && skill.tags.length > 0">
+                        <span x-for="tag in skill.tags" :key="tag" class="tag" x-text="tag"></span>
+                    </div>
+                    <div class="skill-actions">
+                        <button @click.stop="shareSkill(skill.name)" class="btn btn-small">Share</button>
+                        <button @click.stop="deleteSkill(skill.name)" class="btn btn-small btn-danger">Delete</button>
+                    </div>
+                </div>
+            </template>
+            <div x-show="filteredSkills.length === 0" class="empty-state">
+                <p>No skills found. Create your first skill!</p>
+            </div>
+        </div>
+
+        <!-- Editor -->
+        <div class="editor" x-show="showEditor">
+            <div class="editor-header">
+                <h2 x-text="editingSkill ? 'Edit Skill' : 'New Skill'"></h2>
+                <div class="editor-actions">
+                    <input 
+                        type="text" 
+                        x-model="skillName" 
+                        placeholder="Skill name (e.g., docker-guide)"
+                        :disabled="editingSkill !== null"
+                        class="skill-name-input"
+                    >
+                    <button @click="saveSkill()" class="btn btn-primary">Save</button>
+                    <button @click="cancelEdit()" class="btn btn-secondary">Cancel</button>
+                </div>
+            </div>
+            <textarea 
+                x-model="skillContent" 
+                placeholder="Enter markdown content here..."
+                class="editor-textarea"
+            ></textarea>
+        </div>
+    </div>
+
+    <script>
+        function skillServer() {
+            return {
+                skills: [],
+                filteredSkills: [],
+                searchQuery: '',
+                showEditor: false,
+                editingSkill: null,
+                skillName: '',
+                skillContent: '',
+
+                async loadSkills() {
+                    try {
+                        const response = await fetch('/api/skills');
+                        this.skills = await response.json();
+                        this.filteredSkills = this.skills;
+                    } catch (error) {
+                        console.error('Failed to load skills:', error);
+                    }
+                },
+
+                async searchSkills() {
+                    if (!this.searchQuery.trim()) {
+                        this.filteredSkills = this.skills;
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch(`/api/skills/search?q=${encodeURIComponent(this.searchQuery)}`);
+                        this.filteredSkills = await response.json();
+                    } catch (error) {
+                        console.error('Search failed:', error);
+                    }
+                },
+
+                editSkill(skill) {
+                    this.editingSkill = skill;
+                    this.skillName = skill.name;
+                    this.skillContent = skill.content;
+                    this.showEditor = true;
+                },
+
+                async saveSkill() {
+                    if (!this.skillName.trim()) {
+                        alert('Skill name is required');
+                        return;
+                    }
+
+                    const url = this.editingSkill 
+                        ? `/api/skills/${this.editingSkill.name}`
+                        : '/api/skills';
+                    
+                    const method = this.editingSkill ? 'PUT' : 'POST';
+                    const body = this.editingSkill
+                        ? JSON.stringify({ content: this.skillContent })
+                        : JSON.stringify({ name: this.skillName, content: this.skillContent });
+
+                    try {
+                        const response = await fetch(url, {
+                            method: method,
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: body,
+                        });
+
+                        if (response.ok) {
+                            await this.loadSkills();
+                            this.cancelEdit();
+                        } else {
+                            const error = await response.json();
+                            alert('Failed to save: ' + (error.error || 'Unknown error'));
+                        }
+                    } catch (error) {
+                        console.error('Save failed:', error);
+                        alert('Failed to save skill');
+                    }
+                },
+
+                cancelEdit() {
+                    this.showEditor = false;
+                    this.editingSkill = null;
+                    this.skillName = '';
+                    this.skillContent = '';
+                },
+
+                async deleteSkill(name) {
+                    if (!confirm(`Are you sure you want to delete "${name}"?`)) {
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch(`/api/skills/${name}`, {
+                            method: 'DELETE',
+                        });
+
+                        if (response.ok) {
+                            await this.loadSkills();
+                        } else {
+                            alert('Failed to delete skill');
+                        }
+                    } catch (error) {
+                        console.error('Delete failed:', error);
+                        alert('Failed to delete skill');
+                    }
+                },
+
+                async shareSkill(name) {
+                    try {
+                        const response = await fetch(`/api/share/${name}`);
+                        const data = await response.json();
+                        if (data.url) {
+                            window.open(data.url, '_blank');
+                        } else {
+                            alert('Failed to generate share URL');
+                        }
+                    } catch (error) {
+                        console.error('Share failed:', error);
+                        alert('Failed to generate share URL');
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>
