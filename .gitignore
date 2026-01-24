@@ -5,7 +5,7 @@
 *.so
 *.dylib
 bin/
-skillserver
+/skillserver
 
 # Test binary, built with `go test -c`
 *.test
