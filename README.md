@@ -94,12 +94,12 @@ docker run -p 8080:8080 \
   -e SKILLSERVER_PORT=8080 \
   -e SKILLSERVER_GIT_REPOS="https://github.com/user/repo.git" \
   -v $(pwd)/skills:/app/skills \
-  ghcr.io/<owner>/skillserver:latest
+  ghcr.io/mudler/skillserver:latest
 
 # Using command-line flags
 docker run -p 8080:8080 \
   -v $(pwd)/skills:/app/skills \
-  ghcr.io/<owner>/skillserver:latest \
+  ghcr.io/mudler/skillserver:latest \
   --dir /app/skills --port 8080 --git-repos "https://github.com/user/repo.git"
 ```
 
@@ -149,4 +149,4 @@ make docker-build
 
 ## License
 
-[Add your license here]
+MIT

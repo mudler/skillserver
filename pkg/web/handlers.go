@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"github.com/mudler/skillserver/pkg/domain"
 )
@@ -33,7 +33,7 @@ type UpdateSkillRequest struct {
 }
 
 // listSkills lists all skills
-func (s *Server) listSkills(c echo.Context) error {
+func (s *Server) listSkills(c *echo.Context) error {
 	skills, err := s.skillManager.ListSkills()
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
@@ -57,7 +57,7 @@ func (s *Server) listSkills(c echo.Context) error {
 }
 
 // getSkill gets a single skill by name
-func (s *Server) getSkill(c echo.Context) error {
+func (s *Server) getSkill(c *echo.Context) error {
 	name := c.Param("name")
 	skill, err := s.skillManager.ReadSkill(name)
 	if err != nil {
@@ -79,7 +79,7 @@ func (s *Server) getSkill(c echo.Context) error {
 }
 
 // createSkill creates a new skill
-func (s *Server) createSkill(c echo.Context) error {
+func (s *Server) createSkill(c *echo.Context) error {
 	var req CreateSkillRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{
@@ -144,7 +144,7 @@ func (s *Server) createSkill(c echo.Context) error {
 }
 
 // updateSkill updates an existing skill
-func (s *Server) updateSkill(c echo.Context) error {
+func (s *Server) updateSkill(c *echo.Context) error {
 	name := c.Param("name")
 	var req UpdateSkillRequest
 	if err := c.Bind(&req); err != nil {
@@ -197,7 +197,7 @@ func (s *Server) updateSkill(c echo.Context) error {
 }
 
 // deleteSkill deletes a skill
-func (s *Server) deleteSkill(c echo.Context) error {
+func (s *Server) deleteSkill(c *echo.Context) error {
 	name := c.Param("name")
 
 	// Get the skills directory from the manager
@@ -228,7 +228,7 @@ func (s *Server) deleteSkill(c echo.Context) error {
 }
 
 // searchSkills searches for skills
-func (s *Server) searchSkills(c echo.Context) error {
+func (s *Server) searchSkills(c *echo.Context) error {
 	query := c.QueryParam("q")
 	if query == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{
@@ -259,7 +259,7 @@ func (s *Server) searchSkills(c echo.Context) error {
 }
 
 // getShareURL generates a URL for sharing a skill on Git providers
-func (s *Server) getShareURL(c echo.Context) error {
+func (s *Server) getShareURL(c *echo.Context) error {
 	name := c.Param("name")
 
 	// Try to determine the Git provider from the first repo URL

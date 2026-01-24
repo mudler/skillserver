@@ -3,11 +3,14 @@ package web
 import (
 	"context"
 	"embed"
+	"io"
 	"io/fs"
+	"log/slog"
 	"net/http"
+	"time"
 
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/echo/v5"
+	"github.com/labstack/echo/v5/middleware"
 
 	"github.com/mudler/skillserver/pkg/domain"
 )
@@ -18,6 +21,7 @@ var uiFiles embed.FS
 // Server wraps the Echo server
 type Server struct {
 	echo         *echo.Echo
+	httpServer   *http.Server
 	skillManager domain.SkillManager
 	gitRepos     []string
 }
@@ -25,15 +29,16 @@ type Server struct {
 // NewServer creates a new web server
 func NewServer(skillManager domain.SkillManager, gitRepos []string, enableLogging bool) *Server {
 	e := echo.New()
-	e.HideBanner = true
 
 	// Middleware
 	// Only enable request logging if explicitly enabled (to avoid interfering with MCP stdio)
 	if enableLogging {
 		e.Use(middleware.RequestLogger())
+	} else {
+		e.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 	e.Use(middleware.Recover())
-	e.Use(middleware.CORS())
+	//e.Use(middleware.CORS())
 
 	server := &Server{
 		echo:         e,
@@ -63,10 +68,19 @@ func NewServer(skillManager domain.SkillManager, gitRepos []string, enableLoggin
 
 // Start starts the web server
 func (s *Server) Start(addr string) error {
-	return s.echo.Start(addr)
+	s.httpServer = &http.Server{
+		Addr:    addr,
+		Handler: s.echo,
+	}
+	return s.httpServer.ListenAndServe()
 }
 
 // Shutdown gracefully shuts down the server
 func (s *Server) Shutdown() error {
-	return s.echo.Shutdown(context.Background())
+	if s.httpServer == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return s.httpServer.Shutdown(ctx)
 }
