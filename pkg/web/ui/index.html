@@ -227,6 +227,111 @@
         .editor-textarea:focus {
             border-color: #2563eb;
         }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            color: #6b7280;
+            transition: color 0.2s;
+        }
+
+        .tab:hover {
+            color: #2563eb;
+        }
+
+        .tab.active {
+            color: #2563eb;
+            border-bottom-color: #2563eb;
+        }
+
+        .resource-section {
+            margin-bottom: 30px;
+        }
+
+        .resource-section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .resource-section-header h3 {
+            font-size: 1.2em;
+            color: #2563eb;
+        }
+
+        .resource-list {
+            background: #f9fafb;
+            border-radius: 6px;
+            padding: 15px;
+        }
+
+        .resource-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: white;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .resource-item:hover {
+            background: #f3f4f6;
+        }
+
+        .resource-item-info {
+            flex: 1;
+        }
+
+        .resource-item-name {
+            font-weight: 500;
+            color: #333;
+        }
+
+        .resource-item-meta {
+            font-size: 0.85em;
+            color: #6b7280;
+            margin-top: 4px;
+        }
+
+        .resource-item-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .file-upload-area {
+            border: 2px dashed #d1d5db;
+            border-radius: 6px;
+            padding: 20px;
+            text-align: center;
+            background: #f9fafb;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+
+        .file-upload-area:hover {
+            border-color: #2563eb;
+        }
+
+        .file-upload-area.dragover {
+            border-color: #2563eb;
+            background: #eff6ff;
+        }
     </style>
 </head>
 <body>
@@ -282,58 +387,140 @@
             <div x-show="editingSkill && editingSkill.readOnly" style="background: #fef3c7; border: 1px solid #fbbf24; padding: 12px; border-radius: 6px; margin-bottom: 20px; color: #92400e;">
                 <strong>Read-only:</strong> This skill is from a git repository and cannot be edited.
             </div>
-            <div style="margin-bottom: 20px;">
-                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Skill Name (must match directory name)</label>
+            
+            <!-- Tabs -->
+            <div class="tabs" x-show="editingSkill !== null">
+                <button @click="activeTab = 'content'" :class="{'tab': true, 'active': activeTab === 'content'}">Content</button>
+                <button @click="activeTab = 'resources'; loadResources()" :class="{'tab': true, 'active': activeTab === 'resources'}" :disabled="!editingSkill">Resources</button>
+            </div>
+            
+            <!-- Content Tab -->
+            <div x-show="activeTab === 'content' || editingSkill === null">
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Skill Name (must match directory name)</label>
+                        <input 
+                            type="text" 
+                            x-model="skillName" 
+                            @input="validateName()"
+                            placeholder="skill-name (lowercase, numbers, hyphens only)"
+                            :disabled="editingSkill !== null || (editingSkill && editingSkill.readOnly)"
+                            class="skill-name-input"
+                            style="width: 100%;"
+                        >
+                    <p x-show="nameValidationError" style="color: #dc2626; font-size: 0.875em; margin-top: 4px;" x-text="nameValidationError"></p>
+                </div>
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Description <span style="color: #dc2626;">*</span></label>
+                    <textarea 
+                        x-model="skillDescription" 
+                        placeholder="A description of what this skill does and when to use it (1-1024 characters)"
+                        :disabled="editingSkill && editingSkill.readOnly"
+                        style="width: 100%; padding: 8px; border: 2px solid #e5e7eb; border-radius: 6px; min-height: 80px; resize: vertical;"
+                    ></textarea>
+                </div>
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">License (optional)</label>
                     <input 
                         type="text" 
-                        x-model="skillName" 
-                        @input="validateName()"
-                        placeholder="skill-name (lowercase, numbers, hyphens only)"
-                        :disabled="editingSkill !== null || (editingSkill && editingSkill.readOnly)"
+                        x-model="skillLicense" 
+                        placeholder="e.g., Apache-2.0"
+                        :disabled="editingSkill && editingSkill.readOnly"
                         class="skill-name-input"
                         style="width: 100%;"
                     >
-                <p x-show="nameValidationError" style="color: #dc2626; font-size: 0.875em; margin-top: 4px;" x-text="nameValidationError"></p>
+                </div>
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Compatibility (optional, max 500 chars)</label>
+                    <input 
+                        type="text" 
+                        x-model="skillCompatibility" 
+                        placeholder="e.g., Requires git, docker, jq"
+                        :disabled="editingSkill && editingSkill.readOnly"
+                        class="skill-name-input"
+                        style="width: 100%;"
+                    >
+                </div>
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Content (Markdown)</label>
+                    <textarea 
+                        x-model="skillContent" 
+                        placeholder="Enter markdown content here..."
+                        :disabled="editingSkill && editingSkill.readOnly"
+                        class="editor-textarea"
+                    ></textarea>
+                </div>
             </div>
-            <div style="margin-bottom: 20px;">
-                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Description <span style="color: #dc2626;">*</span></label>
-                <textarea 
-                    x-model="skillDescription" 
-                    placeholder="A description of what this skill does and when to use it (1-1024 characters)"
-                    :disabled="editingSkill && editingSkill.readOnly"
-                    style="width: 100%; padding: 8px; border: 2px solid #e5e7eb; border-radius: 6px; min-height: 80px; resize: vertical;"
-                ></textarea>
-            </div>
-            <div style="margin-bottom: 20px;">
-                <label style="display: block; margin-bottom: 8px; font-weight: 500;">License (optional)</label>
-                <input 
-                    type="text" 
-                    x-model="skillLicense" 
-                    placeholder="e.g., Apache-2.0"
-                    :disabled="editingSkill && editingSkill.readOnly"
-                    class="skill-name-input"
-                    style="width: 100%;"
-                >
-            </div>
-            <div style="margin-bottom: 20px;">
-                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Compatibility (optional, max 500 chars)</label>
-                <input 
-                    type="text" 
-                    x-model="skillCompatibility" 
-                    placeholder="e.g., Requires git, docker, jq"
-                    :disabled="editingSkill && editingSkill.readOnly"
-                    class="skill-name-input"
-                    style="width: 100%;"
-                >
-            </div>
-            <div style="margin-bottom: 20px;">
-                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Content (Markdown)</label>
-                <textarea 
-                    x-model="skillContent" 
-                    placeholder="Enter markdown content here..."
-                    :disabled="editingSkill && editingSkill.readOnly"
-                    class="editor-textarea"
-                ></textarea>
+            
+            <!-- Resources Tab -->
+            <div x-show="activeTab === 'resources' && editingSkill !== null">
+                <div class="resource-section">
+                    <div class="resource-section-header">
+                        <h3>Scripts</h3>
+                        <button @click="showUploadDialog('script')" class="btn btn-small btn-primary" :disabled="editingSkill && editingSkill.readOnly">Upload</button>
+                    </div>
+                    <div class="resource-list">
+                        <template x-for="resource in resources.scripts" :key="resource.path">
+                            <div class="resource-item" @click="viewResource(resource, 'script')">
+                                <div class="resource-item-info">
+                                    <div class="resource-item-name" x-text="resource.name"></div>
+                                    <div class="resource-item-meta" x-text="`${formatSize(resource.size)} • ${resource.mime_type}`"></div>
+                                </div>
+                                <div class="resource-item-actions">
+                                    <button @click.stop="deleteResource(resource.path)" class="btn btn-small btn-danger" :disabled="editingSkill && editingSkill.readOnly">Delete</button>
+                                </div>
+                            </div>
+                        </template>
+                        <div x-show="!resources.scripts || resources.scripts.length === 0" style="text-align: center; padding: 20px; color: #9ca3af;">
+                            No scripts
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="resource-section">
+                    <div class="resource-section-header">
+                        <h3>References</h3>
+                        <button @click="showUploadDialog('reference')" class="btn btn-small btn-primary" :disabled="editingSkill && editingSkill.readOnly">Upload</button>
+                    </div>
+                    <div class="resource-list">
+                        <template x-for="resource in resources.references" :key="resource.path">
+                            <div class="resource-item" @click="viewResource(resource, 'reference')">
+                                <div class="resource-item-info">
+                                    <div class="resource-item-name" x-text="resource.name"></div>
+                                    <div class="resource-item-meta" x-text="`${formatSize(resource.size)} • ${resource.mime_type}`"></div>
+                                </div>
+                                <div class="resource-item-actions">
+                                    <button @click.stop="deleteResource(resource.path)" class="btn btn-small btn-danger" :disabled="editingSkill && editingSkill.readOnly">Delete</button>
+                                </div>
+                            </div>
+                        </template>
+                        <div x-show="!resources.references || resources.references.length === 0" style="text-align: center; padding: 20px; color: #9ca3af;">
+                            No references
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="resource-section">
+                    <div class="resource-section-header">
+                        <h3>Assets</h3>
+                        <button @click="showUploadDialog('asset')" class="btn btn-small btn-primary" :disabled="editingSkill && editingSkill.readOnly">Upload</button>
+                    </div>
+                    <div class="resource-list">
+                        <template x-for="resource in resources.assets" :key="resource.path">
+                            <div class="resource-item" @click="viewResource(resource, 'asset')">
+                                <div class="resource-item-info">
+                                    <div class="resource-item-name" x-text="resource.name"></div>
+                                    <div class="resource-item-meta" x-text="`${formatSize(resource.size)} • ${resource.mime_type}`"></div>
+                                </div>
+                                <div class="resource-item-actions">
+                                    <button @click.stop="deleteResource(resource.path)" class="btn btn-small btn-danger" :disabled="editingSkill && editingSkill.readOnly">Delete</button>
+                                </div>
+                            </div>
+                        </template>
+                        <div x-show="!resources.assets || resources.assets.length === 0" style="text-align: center; padding: 20px; color: #9ca3af;">
+                            No assets
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -352,6 +539,14 @@
                 skillLicense: '',
                 skillCompatibility: '',
                 nameValidationError: '',
+                activeTab: 'content',
+                resources: {
+                    scripts: [],
+                    references: [],
+                    assets: []
+                },
+                viewingResource: null,
+                uploadType: null,
 
                 async loadSkills() {
                     try {
@@ -378,23 +573,17 @@
                 },
 
                 editSkill(skill) {
-                    if (skill.readOnly) {
-                        // For read-only skills, still show them but disable editing
-                        this.editingSkill = skill;
-                        this.skillName = skill.name;
-                        this.skillDescription = skill.description || '';
-                        this.skillContent = skill.content || '';
-                        this.skillLicense = skill.license || '';
-                        this.skillCompatibility = skill.compatibility || '';
-                        this.showEditor = true;
-                    } else {
-                        this.editingSkill = skill;
-                        this.skillName = skill.name;
-                        this.skillDescription = skill.description || '';
-                        this.skillContent = skill.content || '';
-                        this.skillLicense = skill.license || '';
-                        this.skillCompatibility = skill.compatibility || '';
-                        this.showEditor = true;
+                    this.editingSkill = skill;
+                    this.skillName = skill.name;
+                    this.skillDescription = skill.description || '';
+                    this.skillContent = skill.content || '';
+                    this.skillLicense = skill.license || '';
+                    this.skillCompatibility = skill.compatibility || '';
+                    this.activeTab = 'content';
+                    this.showEditor = true;
+                    // Load resources when editing
+                    if (skill) {
+                        this.loadResources();
                     }
                 },
 
@@ -491,6 +680,153 @@
                     this.skillLicense = '';
                     this.skillCompatibility = '';
                     this.nameValidationError = '';
+                    this.activeTab = 'content';
+                    this.resources = { scripts: [], references: [], assets: [] };
+                    this.viewingResource = null;
+                },
+
+                async loadResources() {
+                    if (!this.editingSkill) return;
+                    
+                    try {
+                        const response = await fetch(`/api/skills/${this.editingSkill.name}/resources`);
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.resources = {
+                                scripts: data.scripts || [],
+                                references: data.references || [],
+                                assets: data.assets || []
+                            };
+                        }
+                    } catch (error) {
+                        console.error('Failed to load resources:', error);
+                    }
+                },
+
+                async viewResource(resource, type) {
+                    if (!resource.readable) {
+                        // For binary files, download
+                        window.open(`/api/skills/${this.editingSkill.name}/resources/${resource.path}`, '_blank');
+                        return;
+                    }
+                    
+                    // For text files, show in editor
+                    try {
+                        const response = await fetch(`/api/skills/${this.editingSkill.name}/resources/${resource.path}`);
+                        if (response.ok) {
+                            const content = await response.text();
+                            this.viewingResource = {
+                                path: resource.path,
+                                name: resource.name,
+                                type: type,
+                                content: content,
+                                originalContent: content
+                            };
+                            // Show resource editor modal (simplified - could be enhanced)
+                            if (confirm(`Edit ${resource.name}?`)) {
+                                this.editResourceContent();
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Failed to load resource:', error);
+                        alert('Failed to load resource');
+                    }
+                },
+
+                editResourceContent() {
+                    const newContent = prompt('Edit content:', this.viewingResource.content);
+                    if (newContent !== null && newContent !== this.viewingResource.originalContent) {
+                        this.updateResource(this.viewingResource.path, newContent);
+                    }
+                },
+
+                async updateResource(path, content) {
+                    try {
+                        const response = await fetch(`/api/skills/${this.editingSkill.name}/resources/${path}`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'text/plain',
+                            },
+                            body: content,
+                        });
+
+                        if (response.ok) {
+                            await this.loadResources();
+                            alert('Resource updated successfully');
+                        } else {
+                            const error = await response.json();
+                            alert('Failed to update: ' + (error.error || 'Unknown error'));
+                        }
+                    } catch (error) {
+                        console.error('Update failed:', error);
+                        alert('Failed to update resource');
+                    }
+                },
+
+                showUploadDialog(type) {
+                    this.uploadType = type;
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.onchange = (e) => {
+                        const file = e.target.files[0];
+                        if (file) {
+                            this.uploadResource(file, type);
+                        }
+                    };
+                    input.click();
+                },
+
+                async uploadResource(file, type) {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('type', type);
+                    formData.append('path', `${type}s/${file.name}`);
+
+                    try {
+                        const response = await fetch(`/api/skills/${this.editingSkill.name}/resources`, {
+                            method: 'POST',
+                            body: formData,
+                        });
+
+                        if (response.ok) {
+                            await this.loadResources();
+                            alert('Resource uploaded successfully');
+                        } else {
+                            const error = await response.json();
+                            alert('Failed to upload: ' + (error.error || 'Unknown error'));
+                        }
+                    } catch (error) {
+                        console.error('Upload failed:', error);
+                        alert('Failed to upload resource');
+                    }
+                },
+
+                async deleteResource(path) {
+                    if (!confirm(`Are you sure you want to delete "${path}"?`)) {
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch(`/api/skills/${this.editingSkill.name}/resources/${path}`, {
+                            method: 'DELETE',
+                        });
+
+                        if (response.ok) {
+                            await this.loadResources();
+                        } else {
+                            const error = await response.json();
+                            alert('Failed to delete: ' + (error.error || 'Unknown error'));
+                        }
+                    } catch (error) {
+                        console.error('Delete failed:', error);
+                        alert('Failed to delete resource');
+                    }
+                },
+
+                formatSize(bytes) {
+                    if (bytes < 1024) return bytes + ' B';
+                    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+                    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
                 },
 
                 async deleteSkill(name) {

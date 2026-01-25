@@ -57,6 +57,39 @@ func NewServer(skillManager domain.SkillManager) *Server {
 		return searchSkills(ctx, req, input, skillManager)
 	})
 
+	mcp.AddTool(mcpServer, &mcp.Tool{
+		Name:        "list_skill_resources",
+		Description: "List all resources (scripts, references, assets) in a skill",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input ListSkillResourcesInput) (
+		*mcp.CallToolResult,
+		ListSkillResourcesOutput,
+		error,
+	) {
+		return listSkillResources(ctx, req, input, skillManager)
+	})
+
+	mcp.AddTool(mcpServer, &mcp.Tool{
+		Name:        "read_skill_resource",
+		Description: "Read the content of a skill resource file (scripts, references, or assets). Text files are returned as UTF-8, binary files as base64. Files larger than 1MB cannot be read via MCP.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input ReadSkillResourceInput) (
+		*mcp.CallToolResult,
+		ReadSkillResourceOutput,
+		error,
+	) {
+		return readSkillResource(ctx, req, input, skillManager)
+	})
+
+	mcp.AddTool(mcpServer, &mcp.Tool{
+		Name:        "get_skill_resource_info",
+		Description: "Get metadata about a specific skill resource without reading its content",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetSkillResourceInfoInput) (
+		*mcp.CallToolResult,
+		GetSkillResourceInfoOutput,
+		error,
+	) {
+		return getSkillResourceInfo(ctx, req, input, skillManager)
+	})
+
 	return &Server{
 		mcpServer:    mcpServer,
 		skillManager: skillManager,

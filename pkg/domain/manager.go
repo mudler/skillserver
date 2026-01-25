@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,6 +14,11 @@ type SkillManager interface {
 	ReadSkill(name string) (*Skill, error)
 	SearchSkills(query string) ([]Skill, error)
 	RebuildIndex() error
+
+	// Resource management methods
+	ListSkillResources(skillID string) ([]SkillResource, error)
+	ReadSkillResource(skillID, resourcePath string) (*ResourceContent, error)
+	GetSkillResourceInfo(skillID, resourcePath string) (*SkillResource, error)
 }
 
 // FileSystemManager implements SkillManager using the file system
@@ -272,4 +278,230 @@ func (m *FileSystemManager) RebuildIndex() error {
 // GetSkillsDir returns the skills directory path
 func (m *FileSystemManager) GetSkillsDir() string {
 	return m.skillsDir
+}
+
+// getSkillPath returns the full path to a skill directory given its ID
+func (m *FileSystemManager) getSkillPath(skillID string) (string, error) {
+	// Check if this is a git repo skill (format: repoName/skillName)
+	if strings.Contains(skillID, "/") {
+		parts := strings.Split(skillID, "/")
+		if len(parts) == 2 {
+			repoName := parts[0]
+			skillDirName := parts[1]
+			repoPath := filepath.Join(m.skillsDir, repoName)
+
+			// Recursively search for the skill directory within the repo
+			skillPath, err := m.findSkillDirByName(repoPath, skillDirName)
+			if err != nil {
+				return "", fmt.Errorf("skill not found: %s", skillID)
+			}
+			return skillPath, nil
+		}
+	}
+
+	// Local skill
+	skillPath := filepath.Join(m.skillsDir, skillID)
+	skillMdPath := filepath.Join(skillPath, "SKILL.md")
+	if _, err := os.Stat(skillMdPath); err != nil {
+		return "", fmt.Errorf("skill not found: %s", skillID)
+	}
+	return skillPath, nil
+}
+
+// ListSkillResources lists all resources in a skill's optional directories
+func (m *FileSystemManager) ListSkillResources(skillID string) ([]SkillResource, error) {
+	skillPath, err := m.getSkillPath(skillID)
+	if err != nil {
+		return nil, err
+	}
+
+	var resources []SkillResource
+	resourceDirs := []string{"scripts", "references", "assets"}
+
+	for _, dir := range resourceDirs {
+		dirPath := filepath.Join(skillPath, dir)
+		entries, err := os.ReadDir(dirPath)
+		if err != nil {
+			// Directory doesn't exist, skip
+			continue
+		}
+
+		for _, entry := range entries {
+			if entry.IsDir() {
+				// Recursively list subdirectories
+				subResources, err := m.listResourcesInDir(skillPath, filepath.Join(dir, entry.Name()))
+				if err == nil {
+					resources = append(resources, subResources...)
+				}
+				continue
+			}
+
+			resourcePath := filepath.Join(dir, entry.Name())
+			fullPath := filepath.Join(skillPath, resourcePath)
+
+			info, err := entry.Info()
+			if err != nil {
+				continue
+			}
+
+			// Read file to detect MIME type
+			content, err := os.ReadFile(fullPath)
+			if err != nil {
+				continue
+			}
+
+			mimeType := DetectMimeType(entry.Name(), content)
+			readable := IsTextFile(mimeType)
+
+			resources = append(resources, SkillResource{
+				Type:     GetResourceType(resourcePath),
+				Path:     filepath.ToSlash(resourcePath), // Use forward slashes for consistency
+				Name:     entry.Name(),
+				Size:     info.Size(),
+				MimeType: mimeType,
+				Readable: readable,
+				Modified: info.ModTime(),
+			})
+		}
+	}
+
+	return resources, nil
+}
+
+// listResourcesInDir recursively lists resources in a subdirectory
+func (m *FileSystemManager) listResourcesInDir(skillPath, relPath string) ([]SkillResource, error) {
+	var resources []SkillResource
+	fullPath := filepath.Join(skillPath, relPath)
+
+	entries, err := os.ReadDir(fullPath)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			// Recursively list subdirectories
+			subResources, err := m.listResourcesInDir(skillPath, filepath.Join(relPath, entry.Name()))
+			if err == nil {
+				resources = append(resources, subResources...)
+			}
+			continue
+		}
+
+		resourcePath := filepath.Join(relPath, entry.Name())
+		fullResourcePath := filepath.Join(skillPath, resourcePath)
+
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		// Read file to detect MIME type
+		content, err := os.ReadFile(fullResourcePath)
+		if err != nil {
+			continue
+		}
+
+		mimeType := DetectMimeType(entry.Name(), content)
+		readable := IsTextFile(mimeType)
+
+		resources = append(resources, SkillResource{
+			Type:     GetResourceType(resourcePath),
+			Path:     filepath.ToSlash(resourcePath),
+			Name:     entry.Name(),
+			Size:     info.Size(),
+			MimeType: mimeType,
+			Readable: readable,
+			Modified: info.ModTime(),
+		})
+	}
+
+	return resources, nil
+}
+
+// ReadSkillResource reads the content of a skill resource file
+func (m *FileSystemManager) ReadSkillResource(skillID, resourcePath string) (*ResourceContent, error) {
+	// Validate path
+	if err := ValidateResourcePath(resourcePath); err != nil {
+		return nil, err
+	}
+
+	skillPath, err := m.getSkillPath(skillID)
+	if err != nil {
+		return nil, err
+	}
+
+	fullPath := filepath.Join(skillPath, resourcePath)
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read resource: %w", err)
+	}
+
+	mimeType := DetectMimeType(filepath.Base(resourcePath), content)
+	readable := IsTextFile(mimeType)
+
+	var encoding string
+	var contentStr string
+
+	if readable {
+		// Try to decode as UTF-8
+		contentStr = string(content)
+		encoding = "utf-8"
+	} else {
+		// Encode as base64 for binary files
+		contentStr = base64.StdEncoding.EncodeToString(content)
+		encoding = "base64"
+	}
+
+	return &ResourceContent{
+		Content:  contentStr,
+		Encoding: encoding,
+		MimeType: mimeType,
+		Size:     int64(len(content)),
+	}, nil
+}
+
+// GetSkillResourceInfo gets metadata about a specific resource without reading content
+func (m *FileSystemManager) GetSkillResourceInfo(skillID, resourcePath string) (*SkillResource, error) {
+	// Validate path
+	if err := ValidateResourcePath(resourcePath); err != nil {
+		return nil, err
+	}
+
+	skillPath, err := m.getSkillPath(skillID)
+	if err != nil {
+		return nil, err
+	}
+
+	fullPath := filepath.Join(skillPath, resourcePath)
+	info, err := os.Stat(fullPath)
+	if err != nil {
+		return nil, fmt.Errorf("resource not found: %w", err)
+	}
+
+	if info.IsDir() {
+		return nil, fmt.Errorf("resource path points to a directory, not a file")
+	}
+
+	// Read a small portion to detect MIME type
+	file, err := os.Open(fullPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open resource: %w", err)
+	}
+	defer file.Close()
+
+	buffer := make([]byte, 512)
+	n, _ := file.Read(buffer)
+	mimeType := DetectMimeType(filepath.Base(resourcePath), buffer[:n])
+	readable := IsTextFile(mimeType)
+
+	return &SkillResource{
+		Type:     GetResourceType(resourcePath),
+		Path:     filepath.ToSlash(resourcePath),
+		Name:     filepath.Base(resourcePath),
+		Size:     info.Size(),
+		MimeType: mimeType,
+		Readable: readable,
+		Modified: info.ModTime(),
+	}, nil
 }

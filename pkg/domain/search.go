@@ -50,7 +50,7 @@ func (s *Searcher) IndexSkills(skills []Skill) error {
 
 	// Index each skill
 	for _, skill := range skills {
-		doc := map[string]interface{}{
+		doc := map[string]any{
 			"name":    skill.Name,
 			"content": skill.Content,
 		}
