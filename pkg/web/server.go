@@ -55,6 +55,13 @@ func NewServer(skillManager domain.SkillManager, gitRepos []string, enableLoggin
 	api.DELETE("/skills/:name", server.deleteSkill)
 	api.GET("/skills/search", server.searchSkills)
 
+	// Resource management routes
+	api.GET("/skills/:name/resources", server.listSkillResources)
+	api.GET("/skills/:name/resources/*", server.getSkillResource)
+	api.POST("/skills/:name/resources", server.createSkillResource)
+	api.PUT("/skills/:name/resources/*", server.updateSkillResource)
+	api.DELETE("/skills/:name/resources/*", server.deleteSkillResource)
+
 	// Serve UI
 	uiFS, err := fs.Sub(uiFiles, "ui")
 	if err != nil {

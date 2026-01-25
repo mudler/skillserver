@@ -2,9 +2,12 @@ package web
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/labstack/echo/v5"
 
@@ -403,6 +406,389 @@ func (s *Server) searchSkills(c *echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, responses)
+}
+
+// Resource management handlers
+
+// listSkillResources lists all resources in a skill
+func (s *Server) listSkillResources(c *echo.Context) error {
+	skillName := c.Param("name")
+
+	// Check if skill exists
+	skill, err := s.skillManager.ReadSkill(skillName)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{
+			"error": "skill not found",
+		})
+	}
+
+	resources, err := s.skillManager.ListSkillResources(skill.ID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": err.Error(),
+		})
+	}
+
+	// Group resources by type
+	scripts := []map[string]any{}
+	references := []map[string]any{}
+	assets := []map[string]any{}
+
+	for _, res := range resources {
+		resourceMap := map[string]any{
+			"path":      res.Path,
+			"name":      res.Name,
+			"size":      res.Size,
+			"mime_type": res.MimeType,
+			"readable":  res.Readable,
+			"modified":  res.Modified.Format(time.RFC3339),
+		}
+
+		switch res.Type {
+		case domain.ResourceTypeScript:
+			scripts = append(scripts, resourceMap)
+		case domain.ResourceTypeReference:
+			references = append(references, resourceMap)
+		case domain.ResourceTypeAsset:
+			assets = append(assets, resourceMap)
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"scripts":    scripts,
+		"references": references,
+		"assets":     assets,
+		"readOnly":   skill.ReadOnly,
+	})
+}
+
+// getSkillResource gets a specific resource file
+func (s *Server) getSkillResource(c *echo.Context) error {
+	skillName := c.Param("name")
+	resourcePath := c.Param("*")
+
+	if resourcePath == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "resource path is required",
+		})
+	}
+
+	// Check if skill exists
+	skill, err := s.skillManager.ReadSkill(skillName)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{
+			"error": "skill not found",
+		})
+	}
+
+	// Get resource info first
+	info, err := s.skillManager.GetSkillResourceInfo(skill.ID, resourcePath)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{
+			"error": "resource not found",
+		})
+	}
+
+	// Read resource content
+	content, err := s.skillManager.ReadSkillResource(skill.ID, resourcePath)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": err.Error(),
+		})
+	}
+
+	// Check if client wants base64 encoding
+	encoding := c.QueryParam("encoding")
+	if encoding == "base64" || !info.Readable {
+		return c.JSON(http.StatusOK, map[string]any{
+			"content":   content.Content,
+			"encoding":  content.Encoding,
+			"mime_type": content.MimeType,
+			"size":      content.Size,
+		})
+	}
+
+	// For text files, return as plain text
+	c.Response().Header().Set("Content-Type", content.MimeType)
+	return c.String(http.StatusOK, content.Content)
+}
+
+// createSkillResource creates/uploads a new resource
+func (s *Server) createSkillResource(c *echo.Context) error {
+	skillName := c.Param("name")
+
+	// Check if skill exists and is not read-only
+	skill, err := s.skillManager.ReadSkill(skillName)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{
+			"error": "skill not found",
+		})
+	}
+	if skill.ReadOnly {
+		return c.JSON(http.StatusForbidden, map[string]string{
+			"error": "cannot create resources in read-only skill from git repository",
+		})
+	}
+
+	fsManager, ok := s.skillManager.(*domain.FileSystemManager)
+	if !ok {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "unsupported manager type",
+		})
+	}
+
+	// Check Content-Type to determine if it's multipart/form-data or JSON
+	contentType := c.Request().Header.Get("Content-Type")
+
+	var resourcePath string
+	var fileContent []byte
+
+	if strings.HasPrefix(contentType, "multipart/form-data") {
+		// Handle file upload
+		file, err := c.FormFile("file")
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": "file is required",
+			})
+		}
+
+		resourceType := c.FormValue("type")
+		if resourceType == "" {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": "type is required (script, reference, or asset)",
+			})
+		}
+
+		pathValue := c.FormValue("path")
+		if pathValue != "" {
+			resourcePath = pathValue
+		} else {
+			resourcePath = resourceType + "s/" + file.Filename
+		}
+
+		// Validate path starts with correct directory
+		if !strings.HasPrefix(resourcePath, resourceType+"s/") {
+			resourcePath = resourceType + "s/" + file.Filename
+		}
+
+		src, err := file.Open()
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"error": "failed to open uploaded file",
+			})
+		}
+		defer src.Close()
+
+		fileContent, err = io.ReadAll(src)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"error": "failed to read uploaded file",
+			})
+		}
+	} else {
+		// Handle JSON request for text files
+		var req struct {
+			Type    string `json:"type"`
+			Path    string `json:"path"`
+			Content string `json:"content"`
+		}
+		if err := c.Bind(&req); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": "invalid request",
+			})
+		}
+
+		resourcePath = req.Path
+		if req.Type != "" && !strings.HasPrefix(resourcePath, req.Type+"/") {
+			resourcePath = req.Type + "/" + resourcePath
+		}
+		fileContent = []byte(req.Content)
+	}
+
+	// Validate path
+	if err := domain.ValidateResourcePath(resourcePath); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": err.Error(),
+		})
+	}
+
+	// Check size limit (10MB)
+	const maxFileSize = 10 * 1024 * 1024
+	if len(fileContent) > maxFileSize {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": fmt.Sprintf("file too large (max %d bytes)", maxFileSize),
+		})
+	}
+
+	// Write file
+	skillsDir := fsManager.GetSkillsDir()
+	skillDir := filepath.Join(skillsDir, skillName)
+	fullPath := filepath.Join(skillDir, resourcePath)
+
+	// Create parent directories if needed
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": fmt.Sprintf("failed to create directory: %v", err),
+		})
+	}
+
+	if err := os.WriteFile(fullPath, fileContent, 0644); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": err.Error(),
+		})
+	}
+
+	// Return resource info
+	info, err := s.skillManager.GetSkillResourceInfo(skill.ID, resourcePath)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "failed to read created resource",
+		})
+	}
+
+	return c.JSON(http.StatusCreated, map[string]any{
+		"path":      info.Path,
+		"name":      info.Name,
+		"size":      info.Size,
+		"mime_type": info.MimeType,
+		"readable":  info.Readable,
+		"modified":  info.Modified.Format(time.RFC3339),
+	})
+}
+
+// updateSkillResource updates an existing resource
+func (s *Server) updateSkillResource(c *echo.Context) error {
+	skillName := c.Param("name")
+	resourcePath := c.Param("*")
+
+	if resourcePath == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "resource path is required",
+		})
+	}
+
+	// Check if skill exists and is not read-only
+	skill, err := s.skillManager.ReadSkill(skillName)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{
+			"error": "skill not found",
+		})
+	}
+	if skill.ReadOnly {
+		return c.JSON(http.StatusForbidden, map[string]string{
+			"error": "cannot update resources in read-only skill from git repository",
+		})
+	}
+
+	// Validate path
+	if err := domain.ValidateResourcePath(resourcePath); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": err.Error(),
+		})
+	}
+
+	// Read request body
+	body, err := io.ReadAll(c.Request().Body)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "failed to read request body",
+		})
+	}
+
+	// Check size limit
+	const maxFileSize = 10 * 1024 * 1024
+	if len(body) > maxFileSize {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": fmt.Sprintf("file too large (max %d bytes)", maxFileSize),
+		})
+	}
+
+	fsManager, ok := s.skillManager.(*domain.FileSystemManager)
+	if !ok {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "unsupported manager type",
+		})
+	}
+
+	// Write file
+	skillsDir := fsManager.GetSkillsDir()
+	skillDir := filepath.Join(skillsDir, skillName)
+	fullPath := filepath.Join(skillDir, resourcePath)
+
+	if err := os.WriteFile(fullPath, body, 0644); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": err.Error(),
+		})
+	}
+
+	// Return resource info
+	info, err := s.skillManager.GetSkillResourceInfo(skill.ID, resourcePath)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "failed to read updated resource",
+		})
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"path":      info.Path,
+		"name":      info.Name,
+		"size":      info.Size,
+		"mime_type": info.MimeType,
+		"readable":  info.Readable,
+		"modified":  info.Modified.Format(time.RFC3339),
+	})
+}
+
+// deleteSkillResource deletes a resource
+func (s *Server) deleteSkillResource(c *echo.Context) error {
+	skillName := c.Param("name")
+	resourcePath := c.Param("*")
+
+	if resourcePath == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "resource path is required",
+		})
+	}
+
+	// Check if skill exists and is not read-only
+	skill, err := s.skillManager.ReadSkill(skillName)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{
+			"error": "skill not found",
+		})
+	}
+	if skill.ReadOnly {
+		return c.JSON(http.StatusForbidden, map[string]string{
+			"error": "cannot delete resources from read-only skill from git repository",
+		})
+	}
+
+	// Validate path
+	if err := domain.ValidateResourcePath(resourcePath); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": err.Error(),
+		})
+	}
+
+	fsManager, ok := s.skillManager.(*domain.FileSystemManager)
+	if !ok {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "unsupported manager type",
+		})
+	}
+
+	// Delete file
+	skillsDir := fsManager.GetSkillsDir()
+	skillDir := filepath.Join(skillsDir, skillName)
+	fullPath := filepath.Join(skillDir, resourcePath)
+
+	if err := os.Remove(fullPath); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": err.Error(),
+		})
+	}
+
+	return c.NoContent(http.StatusNoContent)
 }
 
 // Helper functions

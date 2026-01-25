@@ -38,9 +38,20 @@ var _ = Describe("SkillManager", func() {
 			Expect(skills).To(BeEmpty())
 		})
 
-		It("should list markdown files as skills", func() {
-			// Create a dummy markdown file
-			err := os.WriteFile(filepath.Join(tempDir, "docker-guide.md"), []byte("# Docker"), 0644)
+		It("should list directories with SKILL.md as skills", func() {
+			// Create a skill directory with SKILL.md
+			skillDir := filepath.Join(tempDir, "docker-guide")
+			err := os.MkdirAll(skillDir, 0755)
+			Expect(err).NotTo(HaveOccurred())
+			
+			skillMdContent := `---
+name: docker-guide
+description: A guide to Docker
+---
+# Docker Guide
+Content here.
+`
+			err = os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMdContent), 0644)
 			Expect(err).NotTo(HaveOccurred())
 
 			skills, err := manager.ListSkills()
@@ -49,29 +60,56 @@ var _ = Describe("SkillManager", func() {
 			Expect(skills[0].Name).To(Equal("docker-guide"))
 		})
 
-		It("should ignore non-markdown files", func() {
-			err := os.WriteFile(filepath.Join(tempDir, "readme.txt"), []byte("Not a skill"), 0644)
+		It("should ignore directories without SKILL.md", func() {
+			// Create a directory without SKILL.md
+			otherDir := filepath.Join(tempDir, "other-dir")
+			err := os.MkdirAll(otherDir, 0755)
 			Expect(err).NotTo(HaveOccurred())
-			err = os.WriteFile(filepath.Join(tempDir, "skill.md"), []byte("# Skill"), 0644)
+			err = os.WriteFile(filepath.Join(otherDir, "readme.txt"), []byte("Not a skill"), 0644)
+			Expect(err).NotTo(HaveOccurred())
+			
+			// Create a valid skill
+			skillDir := filepath.Join(tempDir, "valid-skill")
+			err = os.MkdirAll(skillDir, 0755)
+			Expect(err).NotTo(HaveOccurred())
+			skillMdContent := `---
+name: valid-skill
+description: A valid skill
+---
+# Valid Skill
+Content.
+`
+			err = os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMdContent), 0644)
 			Expect(err).NotTo(HaveOccurred())
 
 			skills, err := manager.ListSkills()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(skills).To(HaveLen(1))
-			Expect(skills[0].Name).To(Equal("skill"))
+			Expect(skills[0].Name).To(Equal("valid-skill"))
 		})
 	})
 
 	Context("Reading Skills", func() {
 		It("should read the content of a skill file", func() {
-			content := "# Docker Guide\n\nThis is a guide about Docker."
-			err := os.WriteFile(filepath.Join(tempDir, "docker.md"), []byte(content), 0644)
+			skillDir := filepath.Join(tempDir, "docker")
+			err := os.MkdirAll(skillDir, 0755)
+			Expect(err).NotTo(HaveOccurred())
+			
+			skillMdContent := `---
+name: docker
+description: A guide to Docker
+---
+# Docker Guide
+
+This is a guide about Docker.
+`
+			err = os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMdContent), 0644)
 			Expect(err).NotTo(HaveOccurred())
 
 			skill, err := manager.ReadSkill("docker")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(skill.Name).To(Equal("docker"))
-			Expect(skill.Content).To(Equal(content))
+			Expect(skill.Content).To(ContainSubstring("Docker Guide"))
 		})
 
 		It("should return an error for non-existent skill", func() {
@@ -83,12 +121,20 @@ var _ = Describe("SkillManager", func() {
 	Context("Searching Skills", func() {
 		BeforeEach(func() {
 			// Create multiple skills for search tests
-			err := os.WriteFile(filepath.Join(tempDir, "docker.md"), []byte("# Docker\n\nDocker is a containerization platform."), 0644)
-			Expect(err).NotTo(HaveOccurred())
-			err = os.WriteFile(filepath.Join(tempDir, "kubernetes.md"), []byte("# Kubernetes\n\nKubernetes is an orchestration platform."), 0644)
-			Expect(err).NotTo(HaveOccurred())
-			err = os.WriteFile(filepath.Join(tempDir, "linux.md"), []byte("# Linux\n\nLinux is an operating system."), 0644)
-			Expect(err).NotTo(HaveOccurred())
+			createSkill := func(name, description, content string) {
+				skillDir := filepath.Join(tempDir, name)
+				os.MkdirAll(skillDir, 0755)
+				skillMdContent := `---
+name: ` + name + `
+description: ` + description + `
+---
+` + content
+				os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMdContent), 0644)
+			}
+			
+			createSkill("docker", "Docker guide", "# Docker\n\nDocker is a containerization platform.")
+			createSkill("kubernetes", "Kubernetes guide", "# Kubernetes\n\nKubernetes is an orchestration platform.")
+			createSkill("linux", "Linux guide", "# Linux\n\nLinux is an operating system.")
 
 			// Rebuild index after creating files
 			err = manager.RebuildIndex()
@@ -118,13 +164,17 @@ var _ = Describe("SkillManager", func() {
 
 	Context("YAML Frontmatter", func() {
 		It("should parse YAML frontmatter if present", func() {
+			skillDir := filepath.Join(tempDir, "docker")
+			err := os.MkdirAll(skillDir, 0755)
+			Expect(err).NotTo(HaveOccurred())
+			
 			content := `---
-tags: [docker, containers]
+name: docker
 description: A guide to Docker
 ---
 # Docker Guide
 Content here.`
-			err := os.WriteFile(filepath.Join(tempDir, "docker.md"), []byte(content), 0644)
+			err = os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(content), 0644)
 			Expect(err).NotTo(HaveOccurred())
 
 			skill, err := manager.ReadSkill("docker")
@@ -133,14 +183,17 @@ Content here.`
 			Expect(skill.Metadata.Description).To(Equal("A guide to Docker"))
 		})
 
-		It("should handle skills without frontmatter", func() {
+		It("should require frontmatter", func() {
+			skillDir := filepath.Join(tempDir, "docker")
+			err := os.MkdirAll(skillDir, 0755)
+			Expect(err).NotTo(HaveOccurred())
+			
 			content := "# Docker Guide\nContent here."
-			err := os.WriteFile(filepath.Join(tempDir, "docker.md"), []byte(content), 0644)
+			err = os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(content), 0644)
 			Expect(err).NotTo(HaveOccurred())
 
-			skill, err := manager.ReadSkill("docker")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(skill.Metadata).To(BeNil())
+			_, err = manager.ReadSkill("docker")
+			Expect(err).To(HaveOccurred()) // Should fail because frontmatter is required
 		})
 	})
 })
