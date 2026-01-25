@@ -219,3 +219,171 @@ header h1 {
 .editor-textarea:focus {
     border-color: #2563eb;
 }
+
+.tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #e5e7eb;
+}
+
+.tab {
+    padding: 10px 20px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    color: #6b7280;
+    transition: color 0.2s;
+}
+
+.tab:hover {
+    color: #2563eb;
+}
+
+.tab.active {
+    color: #2563eb;
+    border-bottom-color: #2563eb;
+}
+
+.resource-section {
+    margin-bottom: 30px;
+}
+
+.resource-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.resource-section-header h3 {
+    font-size: 1.2em;
+    color: #2563eb;
+}
+
+.resource-list {
+    background: #f9fafb;
+    border-radius: 6px;
+    padding: 15px;
+}
+
+.resource-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    background: white;
+    border-radius: 4px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.resource-item:hover {
+    background: #f3f4f6;
+}
+
+.resource-item-info {
+    flex: 1;
+}
+
+.resource-item-name {
+    font-weight: 500;
+    color: #333;
+}
+
+.resource-item-meta {
+    font-size: 0.85em;
+    color: #6b7280;
+    margin-top: 4px;
+}
+
+.resource-item-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.file-upload-area {
+    border: 2px dashed #d1d5db;
+    border-radius: 6px;
+    padding: 20px;
+    text-align: center;
+    background: #f9fafb;
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+
+.file-upload-area:hover {
+    border-color: #2563eb;
+}
+
+.file-upload-area.dragover {
+    border-color: #2563eb;
+    background: #eff6ff;
+}
+
+.skill-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+}
+
+.read-only-badge {
+    background: #fef3c7;
+    color: #92400e;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75em;
+    font-weight: 500;
+}
+
+.read-only-warning {
+    background: #fef3c7;
+    border: 1px solid #fbbf24;
+    padding: 12px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+    color: #92400e;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+.full-width {
+    width: 100%;
+}
+
+.error-message {
+    color: #dc2626;
+    font-size: 0.875em;
+    margin-top: 4px;
+}
+
+.required-indicator {
+    color: #dc2626;
+}
+
+.form-textarea {
+    width: 100%;
+    padding: 8px;
+    border: 2px solid #e5e7eb;
+    border-radius: 6px;
+    min-height: 80px;
+    resize: vertical;
+}
+
+.empty-resource-state {
+    text-align: center;
+    padding: 20px;
+    color: #9ca3af;
+}

@@ -4,335 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SkillServer</title>
+    <link rel="stylesheet" href="/style.css">
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: #f5f5f5;
-            color: #333;
-            line-height: 1.6;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 30px;
-            padding: 20px;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        header h1 {
-            font-size: 2em;
-            color: #2563eb;
-        }
-
-        .header-actions {
-            display: flex;
-            gap: 10px;
-        }
-
-        .search-bar {
-            margin-bottom: 20px;
-        }
-
-        .search-input {
-            width: 100%;
-            padding: 12px;
-            font-size: 16px;
-            border: 2px solid #e5e7eb;
-            border-radius: 8px;
-            outline: none;
-            transition: border-color 0.2s;
-        }
-
-        .search-input:focus {
-            border-color: #2563eb;
-        }
-
-        .skills-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 20px;
-        }
-
-        .skill-card {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-
-        .skill-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-        }
-
-        .skill-card h3 {
-            margin-bottom: 10px;
-            color: #2563eb;
-            font-size: 1.3em;
-        }
-
-        .skill-description {
-            color: #666;
-            margin-bottom: 15px;
-            font-size: 0.9em;
-        }
-
-        .skill-tags {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 5px;
-            margin-bottom: 15px;
-        }
-
-        .tag {
-            background: #e0e7ff;
-            color: #4338ca;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.85em;
-        }
-
-        .skill-actions {
-            display: flex;
-            gap: 10px;
-            margin-top: 15px;
-        }
-
-        .btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            transition: background-color 0.2s;
-        }
-
-        .btn-primary {
-            background: #2563eb;
-            color: white;
-        }
-
-        .btn-primary:hover {
-            background: #1d4ed8;
-        }
-
-        .btn-secondary {
-            background: #6b7280;
-            color: white;
-        }
-
-        .btn-secondary:hover {
-            background: #4b5563;
-        }
-
-        .btn-danger {
-            background: #dc2626;
-            color: white;
-        }
-
-        .btn-danger:hover {
-            background: #b91c1c;
-        }
-
-        .btn-small {
-            padding: 6px 12px;
-            font-size: 12px;
-        }
-
-        .empty-state {
-            grid-column: 1 / -1;
-            text-align: center;
-            padding: 60px 20px;
-            color: #9ca3af;
-        }
-
-        .editor {
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            padding: 20px;
-        }
-
-        .editor-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid #e5e7eb;
-        }
-
-        .editor-header h2 {
-            color: #2563eb;
-        }
-
-        .editor-actions {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-
-        .skill-name-input {
-            padding: 8px 12px;
-            border: 2px solid #e5e7eb;
-            border-radius: 6px;
-            font-size: 14px;
-            outline: none;
-            transition: border-color 0.2s;
-        }
-
-        .skill-name-input:focus {
-            border-color: #2563eb;
-        }
-
-        .skill-name-input:disabled {
-            background: #f3f4f6;
-            color: #6b7280;
-        }
-
-        .editor-textarea {
-            width: 100%;
-            min-height: 500px;
-            padding: 15px;
-            border: 2px solid #e5e7eb;
-            border-radius: 6px;
-            font-family: 'Monaco', 'Courier New', monospace;
-            font-size: 14px;
-            line-height: 1.5;
-            resize: vertical;
-            outline: none;
-            transition: border-color 0.2s;
-        }
-
-        .editor-textarea:focus {
-            border-color: #2563eb;
-        }
-
-        .tabs {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-            border-bottom: 2px solid #e5e7eb;
-        }
-
-        .tab {
-            padding: 10px 20px;
-            background: none;
-            border: none;
-            border-bottom: 2px solid transparent;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            color: #6b7280;
-            transition: color 0.2s;
-        }
-
-        .tab:hover {
-            color: #2563eb;
-        }
-
-        .tab.active {
-            color: #2563eb;
-            border-bottom-color: #2563eb;
-        }
-
-        .resource-section {
-            margin-bottom: 30px;
-        }
-
-        .resource-section-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-
-        .resource-section-header h3 {
-            font-size: 1.2em;
-            color: #2563eb;
-        }
-
-        .resource-list {
-            background: #f9fafb;
-            border-radius: 6px;
-            padding: 15px;
-        }
-
-        .resource-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px;
-            background: white;
-            border-radius: 4px;
-            margin-bottom: 8px;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-
-        .resource-item:hover {
-            background: #f3f4f6;
-        }
-
-        .resource-item-info {
-            flex: 1;
-        }
-
-        .resource-item-name {
-            font-weight: 500;
-            color: #333;
-        }
-
-        .resource-item-meta {
-            font-size: 0.85em;
-            color: #6b7280;
-            margin-top: 4px;
-        }
-
-        .resource-item-actions {
-            display: flex;
-            gap: 8px;
-        }
-
-        .file-upload-area {
-            border: 2px dashed #d1d5db;
-            border-radius: 6px;
-            padding: 20px;
-            text-align: center;
-            background: #f9fafb;
-            cursor: pointer;
-            transition: border-color 0.2s;
-        }
-
-        .file-upload-area:hover {
-            border-color: #2563eb;
-        }
-
-        .file-upload-area.dragover {
-            border-color: #2563eb;
-            background: #eff6ff;
-        }
-    </style>
 </head>
 <body>
     <div x-data="skillServer()" x-init="loadSkills()" class="container">
@@ -360,9 +33,9 @@
         <div class="skills-grid" x-show="!showEditor">
             <template x-for="skill in filteredSkills" :key="skill.name">
                 <div class="skill-card" @click="editSkill(skill)">
-                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                    <div class="skill-card-header">
                         <h3 x-text="skill.name"></h3>
-                        <span x-show="skill.readOnly" style="background: #fef3c7; color: #92400e; padding: 4px 8px; border-radius: 4px; font-size: 0.75em; font-weight: 500;">Read-only</span>
+                        <span x-show="skill.readOnly" class="read-only-badge">Read-only</span>
                     </div>
                     <p x-text="skill.description || 'No description'" class="skill-description"></p>
                     <div class="skill-actions">
@@ -384,7 +57,7 @@
                     <button @click="cancelEdit()" class="btn btn-secondary">Cancel</button>
                 </div>
             </div>
-            <div x-show="editingSkill && editingSkill.readOnly" style="background: #fef3c7; border: 1px solid #fbbf24; padding: 12px; border-radius: 6px; margin-bottom: 20px; color: #92400e;">
+            <div x-show="editingSkill && editingSkill.readOnly" class="read-only-warning">
                 <strong>Read-only:</strong> This skill is from a git repository and cannot be edited.
             </div>
             
@@ -396,52 +69,49 @@
             
             <!-- Content Tab -->
             <div x-show="activeTab === 'content' || editingSkill === null">
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Skill Name (must match directory name)</label>
+                <div class="form-group">
+                    <label class="form-label">Skill Name (must match directory name)</label>
                         <input 
                             type="text" 
                             x-model="skillName" 
                             @input="validateName()"
                             placeholder="skill-name (lowercase, numbers, hyphens only)"
                             :disabled="editingSkill !== null || (editingSkill && editingSkill.readOnly)"
-                            class="skill-name-input"
-                            style="width: 100%;"
+                            class="skill-name-input full-width"
                         >
-                    <p x-show="nameValidationError" style="color: #dc2626; font-size: 0.875em; margin-top: 4px;" x-text="nameValidationError"></p>
+                    <p x-show="nameValidationError" class="error-message" x-text="nameValidationError"></p>
                 </div>
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Description <span style="color: #dc2626;">*</span></label>
+                <div class="form-group">
+                    <label class="form-label">Description <span class="required-indicator">*</span></label>
                     <textarea 
                         x-model="skillDescription" 
                         placeholder="A description of what this skill does and when to use it (1-1024 characters)"
                         :disabled="editingSkill && editingSkill.readOnly"
-                        style="width: 100%; padding: 8px; border: 2px solid #e5e7eb; border-radius: 6px; min-height: 80px; resize: vertical;"
+                        class="form-textarea"
                     ></textarea>
                 </div>
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">License (optional)</label>
+                <div class="form-group">
+                    <label class="form-label">License (optional)</label>
                     <input 
                         type="text" 
                         x-model="skillLicense" 
                         placeholder="e.g., Apache-2.0"
                         :disabled="editingSkill && editingSkill.readOnly"
-                        class="skill-name-input"
-                        style="width: 100%;"
+                        class="skill-name-input full-width"
                     >
                 </div>
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Compatibility (optional, max 500 chars)</label>
+                <div class="form-group">
+                    <label class="form-label">Compatibility (optional, max 500 chars)</label>
                     <input 
                         type="text" 
                         x-model="skillCompatibility" 
                         placeholder="e.g., Requires git, docker, jq"
                         :disabled="editingSkill && editingSkill.readOnly"
-                        class="skill-name-input"
-                        style="width: 100%;"
+                        class="skill-name-input full-width"
                     >
                 </div>
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Content (Markdown)</label>
+                <div class="form-group">
+                    <label class="form-label">Content (Markdown)</label>
                     <textarea 
                         x-model="skillContent" 
                         placeholder="Enter markdown content here..."
@@ -470,7 +140,7 @@
                                 </div>
                             </div>
                         </template>
-                        <div x-show="!resources.scripts || resources.scripts.length === 0" style="text-align: center; padding: 20px; color: #9ca3af;">
+                        <div x-show="!resources.scripts || resources.scripts.length === 0" class="empty-resource-state">
                             No scripts
                         </div>
                     </div>
@@ -493,7 +163,7 @@
                                 </div>
                             </div>
                         </template>
-                        <div x-show="!resources.references || resources.references.length === 0" style="text-align: center; padding: 20px; color: #9ca3af;">
+                        <div x-show="!resources.references || resources.references.length === 0" class="empty-resource-state">
                             No references
                         </div>
                     </div>
@@ -516,7 +186,7 @@
                                 </div>
                             </div>
                         </template>
-                        <div x-show="!resources.assets || resources.assets.length === 0" style="text-align: center; padding: 20px; color: #9ca3af;">
+                        <div x-show="!resources.assets || resources.assets.length === 0" class="empty-resource-state">
                             No assets
                         </div>
                     </div>
