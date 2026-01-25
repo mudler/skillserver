@@ -19,14 +19,14 @@ type ListSkillsOutput struct {
 
 // SkillInfo represents basic information about a skill
 type SkillInfo struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description,omitempty"`
-	Tags        []string `json:"tags,omitempty"`
+	ID          string `json:"id"`   // Unique identifier to use when reading the skill (repoName/skillName or skillName)
+	Name        string `json:"name"` // Display name
+	Description string `json:"description,omitempty"`
 }
 
 // ReadSkillInput is the input for read_skill tool
 type ReadSkillInput struct {
-	Filename string `json:"filename" jsonschema:"The name of the skill file (without .md extension)"`
+	ID string `json:"id" jsonschema:"The skill ID returned by list_skills or search_skills (format: 'skill-name' for local skills, or 'repoName/skill-name' for git repo skills)"`
 }
 
 // ReadSkillOutput is the output for read_skill tool
@@ -46,7 +46,8 @@ type SearchSkillsOutput struct {
 
 // SearchResult represents a search result
 type SearchResult struct {
-	Name    string `json:"name"`
+	ID      string `json:"id"`   // Unique identifier to use when reading the skill (repoName/skillName or skillName)
+	Name    string `json:"name"` // Display name
 	Content string `json:"content"`
 	Snippet string `json:"snippet,omitempty"`
 }
@@ -65,11 +66,11 @@ func listSkills(ctx context.Context, req *mcp.CallToolRequest, input ListSkillsI
 	skillInfos := make([]SkillInfo, len(skills))
 	for i, skill := range skills {
 		skillInfos[i] = SkillInfo{
-			Name: skill.Name,
+			ID: skill.ID,
+			//	Name: skill.Name,
 		}
 		if skill.Metadata != nil {
 			skillInfos[i].Description = skill.Metadata.Description
-			skillInfos[i].Tags = skill.Metadata.Tags
 		}
 	}
 
@@ -82,7 +83,7 @@ func readSkill(ctx context.Context, req *mcp.CallToolRequest, input ReadSkillInp
 	ReadSkillOutput,
 	error,
 ) {
-	skill, err := manager.ReadSkill(input.Filename)
+	skill, err := manager.ReadSkill(input.ID)
 	if err != nil {
 		return nil, ReadSkillOutput{}, fmt.Errorf("failed to read skill: %w", err)
 	}
@@ -110,6 +111,7 @@ func searchSkills(ctx context.Context, req *mcp.CallToolRequest, input SearchSki
 		}
 
 		results[i] = SearchResult{
+			ID:      skill.ID,
 			Name:    skill.Name,
 			Content: skill.Content,
 			Snippet: snippet,

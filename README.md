@@ -1,6 +1,6 @@
-# SkillServer
+# skillserver
 
-A local Golang application serving as a centralized skills database for AI Agents. It manages "Skills" (Markdown files) stored in a local directory.
+An MCP/REST server with WebUI serving as a centralized skills database for AI Agents. It manages "Skills" (Markdown files) stored in a local directory.
 
 ## Features
 
@@ -14,8 +14,8 @@ A local Golang application serving as a centralized skills database for AI Agent
 ### From Source
 
 ```bash
-git clone <repository-url>
-cd SkillsServer
+git clone https://github.com/mudler/skillserver
+cd skillserver
 make build
 ```
 

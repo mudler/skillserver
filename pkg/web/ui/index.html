@@ -234,7 +234,7 @@
         <header>
             <h1>SkillServer</h1>
             <div class="header-actions">
-                <button @click="showEditor = true; editingSkill = null; skillContent = ''; skillName = ''" class="btn btn-primary">
+                <button @click="showEditor = true; editingSkill = null; skillContent = ''; skillName = ''; skillDescription = ''; skillLicense = ''; skillCompatibility = ''; nameValidationError = ''" class="btn btn-primary">
                     New Skill
                 </button>
             </div>
@@ -255,14 +255,13 @@
         <div class="skills-grid" x-show="!showEditor">
             <template x-for="skill in filteredSkills" :key="skill.name">
                 <div class="skill-card" @click="editSkill(skill)">
-                    <h3 x-text="skill.name"></h3>
-                    <p x-text="skill.description || 'No description'" class="skill-description"></p>
-                    <div class="skill-tags" x-show="skill.tags && skill.tags.length > 0">
-                        <span x-for="tag in skill.tags" :key="tag" class="tag" x-text="tag"></span>
+                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                        <h3 x-text="skill.name"></h3>
+                        <span x-show="skill.readOnly" style="background: #fef3c7; color: #92400e; padding: 4px 8px; border-radius: 4px; font-size: 0.75em; font-weight: 500;">Read-only</span>
                     </div>
+                    <p x-text="skill.description || 'No description'" class="skill-description"></p>
                     <div class="skill-actions">
-                        <button @click.stop="shareSkill(skill.name)" class="btn btn-small">Share</button>
-                        <button @click.stop="deleteSkill(skill.name)" class="btn btn-small btn-danger">Delete</button>
+                        <button @click.stop="deleteSkill(skill.name)" class="btn btn-small btn-danger" :disabled="skill.readOnly">Delete</button>
                     </div>
                 </div>
             </template>
@@ -276,22 +275,66 @@
             <div class="editor-header">
                 <h2 x-text="editingSkill ? 'Edit Skill' : 'New Skill'"></h2>
                 <div class="editor-actions">
-                    <input 
-                        type="text" 
-                        x-model="skillName" 
-                        placeholder="Skill name (e.g., docker-guide)"
-                        :disabled="editingSkill !== null"
-                        class="skill-name-input"
-                    >
-                    <button @click="saveSkill()" class="btn btn-primary">Save</button>
+                    <button @click="saveSkill()" class="btn btn-primary" :disabled="editingSkill && editingSkill.readOnly">Save</button>
                     <button @click="cancelEdit()" class="btn btn-secondary">Cancel</button>
                 </div>
             </div>
-            <textarea 
-                x-model="skillContent" 
-                placeholder="Enter markdown content here..."
-                class="editor-textarea"
-            ></textarea>
+            <div x-show="editingSkill && editingSkill.readOnly" style="background: #fef3c7; border: 1px solid #fbbf24; padding: 12px; border-radius: 6px; margin-bottom: 20px; color: #92400e;">
+                <strong>Read-only:</strong> This skill is from a git repository and cannot be edited.
+            </div>
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Skill Name (must match directory name)</label>
+                    <input 
+                        type="text" 
+                        x-model="skillName" 
+                        @input="validateName()"
+                        placeholder="skill-name (lowercase, numbers, hyphens only)"
+                        :disabled="editingSkill !== null || (editingSkill && editingSkill.readOnly)"
+                        class="skill-name-input"
+                        style="width: 100%;"
+                    >
+                <p x-show="nameValidationError" style="color: #dc2626; font-size: 0.875em; margin-top: 4px;" x-text="nameValidationError"></p>
+            </div>
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Description <span style="color: #dc2626;">*</span></label>
+                <textarea 
+                    x-model="skillDescription" 
+                    placeholder="A description of what this skill does and when to use it (1-1024 characters)"
+                    :disabled="editingSkill && editingSkill.readOnly"
+                    style="width: 100%; padding: 8px; border: 2px solid #e5e7eb; border-radius: 6px; min-height: 80px; resize: vertical;"
+                ></textarea>
+            </div>
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 8px; font-weight: 500;">License (optional)</label>
+                <input 
+                    type="text" 
+                    x-model="skillLicense" 
+                    placeholder="e.g., Apache-2.0"
+                    :disabled="editingSkill && editingSkill.readOnly"
+                    class="skill-name-input"
+                    style="width: 100%;"
+                >
+            </div>
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Compatibility (optional, max 500 chars)</label>
+                <input 
+                    type="text" 
+                    x-model="skillCompatibility" 
+                    placeholder="e.g., Requires git, docker, jq"
+                    :disabled="editingSkill && editingSkill.readOnly"
+                    class="skill-name-input"
+                    style="width: 100%;"
+                >
+            </div>
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Content (Markdown)</label>
+                <textarea 
+                    x-model="skillContent" 
+                    placeholder="Enter markdown content here..."
+                    :disabled="editingSkill && editingSkill.readOnly"
+                    class="editor-textarea"
+                ></textarea>
+            </div>
         </div>
     </div>
 
@@ -304,7 +347,11 @@
                 showEditor: false,
                 editingSkill: null,
                 skillName: '',
+                skillDescription: '',
                 skillContent: '',
+                skillLicense: '',
+                skillCompatibility: '',
+                nameValidationError: '',
 
                 async loadSkills() {
                     try {
@@ -331,15 +378,72 @@
                 },
 
                 editSkill(skill) {
-                    this.editingSkill = skill;
-                    this.skillName = skill.name;
-                    this.skillContent = skill.content;
-                    this.showEditor = true;
+                    if (skill.readOnly) {
+                        // For read-only skills, still show them but disable editing
+                        this.editingSkill = skill;
+                        this.skillName = skill.name;
+                        this.skillDescription = skill.description || '';
+                        this.skillContent = skill.content || '';
+                        this.skillLicense = skill.license || '';
+                        this.skillCompatibility = skill.compatibility || '';
+                        this.showEditor = true;
+                    } else {
+                        this.editingSkill = skill;
+                        this.skillName = skill.name;
+                        this.skillDescription = skill.description || '';
+                        this.skillContent = skill.content || '';
+                        this.skillLicense = skill.license || '';
+                        this.skillCompatibility = skill.compatibility || '';
+                        this.showEditor = true;
+                    }
+                },
+
+                validateName() {
+                    this.nameValidationError = '';
+                    const name = this.skillName.trim();
+                    if (!name) {
+                        this.nameValidationError = 'Skill name is required';
+                        return false;
+                    }
+                    if (name.length > 64) {
+                        this.nameValidationError = 'Skill name must be 1-64 characters';
+                        return false;
+                    }
+                    if (name.startsWith('-') || name.endsWith('-')) {
+                        this.nameValidationError = 'Skill name cannot start or end with a hyphen';
+                        return false;
+                    }
+                    if (name.includes('--')) {
+                        this.nameValidationError = 'Skill name cannot contain consecutive hyphens';
+                        return false;
+                    }
+                    if (!/^[a-z0-9-]+$/.test(name)) {
+                        this.nameValidationError = 'Skill name may only contain lowercase letters, numbers, and hyphens';
+                        return false;
+                    }
+                    return true;
                 },
 
                 async saveSkill() {
-                    if (!this.skillName.trim()) {
-                        alert('Skill name is required');
+                    if (this.editingSkill && this.editingSkill.readOnly) {
+                        alert('Cannot save: This skill is read-only');
+                        return;
+                    }
+
+                    if (!this.validateName()) {
+                        return;
+                    }
+
+                    if (!this.skillDescription.trim()) {
+                        alert('Description is required');
+                        return;
+                    }
+                    if (this.skillDescription.length > 1024) {
+                        alert('Description must be 1-1024 characters');
+                        return;
+                    }
+                    if (this.skillCompatibility && this.skillCompatibility.length > 500) {
+                        alert('Compatibility must be max 500 characters');
                         return;
                     }
 
@@ -348,9 +452,13 @@
                         : '/api/skills';
                     
                     const method = this.editingSkill ? 'PUT' : 'POST';
-                    const body = this.editingSkill
-                        ? JSON.stringify({ content: this.skillContent })
-                        : JSON.stringify({ name: this.skillName, content: this.skillContent });
+                    const body = JSON.stringify({
+                        name: this.skillName,
+                        description: this.skillDescription,
+                        content: this.skillContent,
+                        license: this.skillLicense || undefined,
+                        compatibility: this.skillCompatibility || undefined,
+                    });
 
                     try {
                         const response = await fetch(url, {
@@ -378,7 +486,11 @@
                     this.showEditor = false;
                     this.editingSkill = null;
                     this.skillName = '';
+                    this.skillDescription = '';
                     this.skillContent = '';
+                    this.skillLicense = '';
+                    this.skillCompatibility = '';
+                    this.nameValidationError = '';
                 },
 
                 async deleteSkill(name) {
@@ -394,26 +506,12 @@
                         if (response.ok) {
                             await this.loadSkills();
                         } else {
-                            alert('Failed to delete skill');
+                            const error = await response.json();
+                            alert('Failed to delete: ' + (error.error || 'Unknown error'));
                         }
                     } catch (error) {
                         console.error('Delete failed:', error);
                         alert('Failed to delete skill');
-                    }
-                },
-
-                async shareSkill(name) {
-                    try {
-                        const response = await fetch(`/api/share/${name}`);
-                        const data = await response.json();
-                        if (data.url) {
-                            window.open(data.url, '_blank');
-                        } else {
-                            alert('Failed to generate share URL');
-                        }
-                    } catch (error) {
-                        console.error('Share failed:', error);
-                        alert('Failed to generate share URL');
                     }
                 }
             }

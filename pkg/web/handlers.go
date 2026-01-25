@@ -3,10 +3,8 @@ package web
 import (
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/labstack/echo/v5"
 
@@ -15,21 +13,35 @@ import (
 
 // SkillResponse represents a skill in API responses
 type SkillResponse struct {
-	Name        string   `json:"name"`
-	Content     string   `json:"content"`
-	Description string   `json:"description,omitempty"`
-	Tags        []string `json:"tags,omitempty"`
+	Name          string            `json:"name"`
+	Content       string            `json:"content"`
+	Description   string            `json:"description,omitempty"`
+	License       string            `json:"license,omitempty"`
+	Compatibility string            `json:"compatibility,omitempty"`
+	Metadata      map[string]string `json:"metadata,omitempty"`
+	AllowedTools  string            `json:"allowed-tools,omitempty"`
+	ReadOnly      bool              `json:"readOnly"`
 }
 
 // CreateSkillRequest represents a request to create a skill
 type CreateSkillRequest struct {
-	Name    string `json:"name"`
-	Content string `json:"content"`
+	Name          string            `json:"name"`
+	Description   string            `json:"description"`
+	Content       string            `json:"content"`
+	License       string            `json:"license,omitempty"`
+	Compatibility string            `json:"compatibility,omitempty"`
+	Metadata      map[string]string `json:"metadata,omitempty"`
+	AllowedTools  string            `json:"allowed-tools,omitempty"`
 }
 
 // UpdateSkillRequest represents a request to update a skill
 type UpdateSkillRequest struct {
-	Content string `json:"content"`
+	Description   string            `json:"description"`
+	Content       string            `json:"content"`
+	License       string            `json:"license,omitempty"`
+	Compatibility string            `json:"compatibility,omitempty"`
+	Metadata      map[string]string `json:"metadata,omitempty"`
+	AllowedTools  string            `json:"allowed-tools,omitempty"`
 }
 
 // listSkills lists all skills
@@ -44,12 +56,16 @@ func (s *Server) listSkills(c *echo.Context) error {
 	responses := make([]SkillResponse, len(skills))
 	for i, skill := range skills {
 		responses[i] = SkillResponse{
-			Name:    skill.Name,
-			Content: skill.Content,
+			Name:     skill.Name,
+			Content:  skill.Content,
+			ReadOnly: skill.ReadOnly,
 		}
 		if skill.Metadata != nil {
 			responses[i].Description = skill.Metadata.Description
-			responses[i].Tags = skill.Metadata.Tags
+			responses[i].License = skill.Metadata.License
+			responses[i].Compatibility = skill.Metadata.Compatibility
+			responses[i].Metadata = skill.Metadata.Metadata
+			responses[i].AllowedTools = skill.Metadata.AllowedTools
 		}
 	}
 
@@ -67,12 +83,16 @@ func (s *Server) getSkill(c *echo.Context) error {
 	}
 
 	response := SkillResponse{
-		Name:    skill.Name,
-		Content: skill.Content,
+		Name:     skill.Name,
+		Content:  skill.Content,
+		ReadOnly: skill.ReadOnly,
 	}
 	if skill.Metadata != nil {
 		response.Description = skill.Metadata.Description
-		response.Tags = skill.Metadata.Tags
+		response.License = skill.Metadata.License
+		response.Compatibility = skill.Metadata.Compatibility
+		response.Metadata = skill.Metadata.Metadata
+		response.AllowedTools = skill.Metadata.AllowedTools
 	}
 
 	return c.JSON(http.StatusOK, response)
@@ -94,13 +114,33 @@ func (s *Server) createSkill(c *echo.Context) error {
 		})
 	}
 
-	// Sanitize name (remove .md extension if present, remove path separators)
-	name := strings.TrimSuffix(req.Name, ".md")
-	name = strings.ReplaceAll(name, "/", "_")
-	name = strings.ReplaceAll(name, "\\", "_")
+	// Validate name according to Agent Skills spec
+	if err := domain.ValidateSkillName(req.Name); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": err.Error(),
+		})
+	}
+
+	// Validate description
+	if req.Description == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "description is required",
+		})
+	}
+	if len(req.Description) > 1024 {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "description must be 1-1024 characters",
+		})
+	}
+
+	// Validate compatibility if provided
+	if req.Compatibility != "" && len(req.Compatibility) > 500 {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "compatibility must be max 500 characters",
+		})
+	}
 
 	// Get the skills directory from the manager
-	// We need to access the underlying FileSystemManager
 	fsManager, ok := s.skillManager.(*domain.FileSystemManager)
 	if !ok {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
@@ -108,10 +148,39 @@ func (s *Server) createSkill(c *echo.Context) error {
 		})
 	}
 
-	// Write the file
+	// Create skill directory
 	skillsDir := fsManager.GetSkillsDir()
-	filename := filepath.Join(skillsDir, name+".md")
-	if err := writeFile(filename, req.Content); err != nil {
+	skillDir := filepath.Join(skillsDir, req.Name)
+	if err := os.MkdirAll(skillDir, 0755); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": fmt.Sprintf("failed to create skill directory: %v", err),
+		})
+	}
+
+	// Build frontmatter
+	frontmatter := fmt.Sprintf("---\nname: %s\ndescription: %s\n", req.Name, req.Description)
+	if req.License != "" {
+		frontmatter += fmt.Sprintf("license: %s\n", req.License)
+	}
+	if req.Compatibility != "" {
+		frontmatter += fmt.Sprintf("compatibility: %s\n", req.Compatibility)
+	}
+	if len(req.Metadata) > 0 {
+		frontmatter += "metadata:\n"
+		for k, v := range req.Metadata {
+			frontmatter += fmt.Sprintf("  %s: %s\n", k, v)
+		}
+	}
+	if req.AllowedTools != "" {
+		frontmatter += fmt.Sprintf("allowed-tools: %s\n", req.AllowedTools)
+	}
+	frontmatter += "---\n\n"
+
+	// Write SKILL.md file
+	skillMdPath := filepath.Join(skillDir, "SKILL.md")
+	fullContent := frontmatter + req.Content
+	if err := writeFile(skillMdPath, fullContent); err != nil {
+		os.RemoveAll(skillDir) // Clean up on error
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": err.Error(),
 		})
@@ -124,7 +193,7 @@ func (s *Server) createSkill(c *echo.Context) error {
 		})
 	}
 
-	skill, err := s.skillManager.ReadSkill(name)
+	skill, err := s.skillManager.ReadSkill(req.Name)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "failed to read created skill",
@@ -132,12 +201,16 @@ func (s *Server) createSkill(c *echo.Context) error {
 	}
 
 	response := SkillResponse{
-		Name:    skill.Name,
-		Content: skill.Content,
+		Name:     skill.Name,
+		Content:  skill.Content,
+		ReadOnly: skill.ReadOnly,
 	}
 	if skill.Metadata != nil {
 		response.Description = skill.Metadata.Description
-		response.Tags = skill.Metadata.Tags
+		response.License = skill.Metadata.License
+		response.Compatibility = skill.Metadata.Compatibility
+		response.Metadata = skill.Metadata.Metadata
+		response.AllowedTools = skill.Metadata.AllowedTools
 	}
 
 	return c.JSON(http.StatusCreated, response)
@@ -146,10 +219,43 @@ func (s *Server) createSkill(c *echo.Context) error {
 // updateSkill updates an existing skill
 func (s *Server) updateSkill(c *echo.Context) error {
 	name := c.Param("name")
+
+	// Check if skill exists and is read-only
+	existingSkill, err := s.skillManager.ReadSkill(name)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{
+			"error": "skill not found",
+		})
+	}
+	if existingSkill.ReadOnly {
+		return c.JSON(http.StatusForbidden, map[string]string{
+			"error": "cannot update read-only skill from git repository",
+		})
+	}
+
 	var req UpdateSkillRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{
 			"error": "invalid request",
+		})
+	}
+
+	// Validate description
+	if req.Description == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "description is required",
+		})
+	}
+	if len(req.Description) > 1024 {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "description must be 1-1024 characters",
+		})
+	}
+
+	// Validate compatibility if provided
+	if req.Compatibility != "" && len(req.Compatibility) > 500 {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "compatibility must be max 500 characters",
 		})
 	}
 
@@ -161,10 +267,30 @@ func (s *Server) updateSkill(c *echo.Context) error {
 		})
 	}
 
-	// Write the file
-	skillsDir := fsManager.GetSkillsDir()
-	filename := filepath.Join(skillsDir, name+".md")
-	if err := writeFile(filename, req.Content); err != nil {
+	// Build frontmatter (name must match directory name)
+	skillDir := filepath.Join(fsManager.GetSkillsDir(), name)
+	frontmatter := fmt.Sprintf("---\nname: %s\ndescription: %s\n", name, req.Description)
+	if req.License != "" {
+		frontmatter += fmt.Sprintf("license: %s\n", req.License)
+	}
+	if req.Compatibility != "" {
+		frontmatter += fmt.Sprintf("compatibility: %s\n", req.Compatibility)
+	}
+	if len(req.Metadata) > 0 {
+		frontmatter += "metadata:\n"
+		for k, v := range req.Metadata {
+			frontmatter += fmt.Sprintf("  %s: %s\n", k, v)
+		}
+	}
+	if req.AllowedTools != "" {
+		frontmatter += fmt.Sprintf("allowed-tools: %s\n", req.AllowedTools)
+	}
+	frontmatter += "---\n\n"
+
+	// Write SKILL.md file
+	skillMdPath := filepath.Join(skillDir, "SKILL.md")
+	fullContent := frontmatter + req.Content
+	if err := writeFile(skillMdPath, fullContent); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": err.Error(),
 		})
@@ -185,12 +311,16 @@ func (s *Server) updateSkill(c *echo.Context) error {
 	}
 
 	response := SkillResponse{
-		Name:    skill.Name,
-		Content: skill.Content,
+		Name:     skill.Name,
+		Content:  skill.Content,
+		ReadOnly: skill.ReadOnly,
 	}
 	if skill.Metadata != nil {
 		response.Description = skill.Metadata.Description
-		response.Tags = skill.Metadata.Tags
+		response.License = skill.Metadata.License
+		response.Compatibility = skill.Metadata.Compatibility
+		response.Metadata = skill.Metadata.Metadata
+		response.AllowedTools = skill.Metadata.AllowedTools
 	}
 
 	return c.JSON(http.StatusOK, response)
@@ -200,6 +330,19 @@ func (s *Server) updateSkill(c *echo.Context) error {
 func (s *Server) deleteSkill(c *echo.Context) error {
 	name := c.Param("name")
 
+	// Check if skill exists and is read-only
+	existingSkill, err := s.skillManager.ReadSkill(name)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{
+			"error": "skill not found",
+		})
+	}
+	if existingSkill.ReadOnly {
+		return c.JSON(http.StatusForbidden, map[string]string{
+			"error": "cannot delete read-only skill from git repository",
+		})
+	}
+
 	// Get the skills directory from the manager
 	fsManager, ok := s.skillManager.(*domain.FileSystemManager)
 	if !ok {
@@ -208,10 +351,10 @@ func (s *Server) deleteSkill(c *echo.Context) error {
 		})
 	}
 
-	// Delete the file
+	// Delete the skill directory
 	skillsDir := fsManager.GetSkillsDir()
-	filename := filepath.Join(skillsDir, name+".md")
-	if err := deleteFile(filename); err != nil {
+	skillDir := filepath.Join(skillsDir, name)
+	if err := os.RemoveAll(skillDir); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": err.Error(),
 		})
@@ -246,35 +389,20 @@ func (s *Server) searchSkills(c *echo.Context) error {
 	responses := make([]SkillResponse, len(skills))
 	for i, skill := range skills {
 		responses[i] = SkillResponse{
-			Name:    skill.Name,
-			Content: skill.Content,
+			Name:     skill.Name,
+			Content:  skill.Content,
+			ReadOnly: skill.ReadOnly,
 		}
 		if skill.Metadata != nil {
 			responses[i].Description = skill.Metadata.Description
-			responses[i].Tags = skill.Metadata.Tags
+			responses[i].License = skill.Metadata.License
+			responses[i].Compatibility = skill.Metadata.Compatibility
+			responses[i].Metadata = skill.Metadata.Metadata
+			responses[i].AllowedTools = skill.Metadata.AllowedTools
 		}
 	}
 
 	return c.JSON(http.StatusOK, responses)
-}
-
-// getShareURL generates a URL for sharing a skill on Git providers
-func (s *Server) getShareURL(c *echo.Context) error {
-	name := c.Param("name")
-
-	// Try to determine the Git provider from the first repo URL
-	if len(s.gitRepos) == 0 {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "no git repositories configured",
-		})
-	}
-
-	repoURL := s.gitRepos[0]
-	shareURL := generateShareURL(repoURL, name)
-
-	return c.JSON(http.StatusOK, map[string]string{
-		"url": shareURL,
-	})
 }
 
 // Helper functions
@@ -285,38 +413,4 @@ func writeFile(filename, content string) error {
 
 func deleteFile(filename string) error {
 	return os.Remove(filename)
-}
-
-func generateShareURL(repoURL, skillName string) string {
-	// Parse the repo URL to determine provider
-	u, err := url.Parse(repoURL)
-	if err != nil {
-		// If parsing fails, return a generic GitHub URL
-		return "https://github.com"
-	}
-
-	// Extract owner and repo from path
-	path := strings.TrimPrefix(u.Path, "/")
-	path = strings.TrimSuffix(path, ".git")
-	parts := strings.Split(path, "/")
-
-	if len(parts) < 2 {
-		return "https://github.com"
-	}
-
-	owner := parts[0]
-	repo := parts[1]
-
-	// Generate URL based on provider
-	switch u.Hostname() {
-	case "github.com":
-		// GitHub: create new file URL
-		return fmt.Sprintf("https://github.com/%s/%s/new/main?filename=skills/%s.md", owner, repo, skillName)
-	case "gitlab.com":
-		// GitLab: create new file URL
-		return fmt.Sprintf("https://gitlab.com/%s/%s/-/new/main?file_name=skills/%s.md", owner, repo, skillName)
-	default:
-		// Generic fallback
-		return fmt.Sprintf("%s://%s/%s/%s", u.Scheme, u.Hostname(), owner, repo)
-	}
 }

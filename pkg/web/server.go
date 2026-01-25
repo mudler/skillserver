@@ -54,7 +54,6 @@ func NewServer(skillManager domain.SkillManager, gitRepos []string, enableLoggin
 	api.PUT("/skills/:name", server.updateSkill)
 	api.DELETE("/skills/:name", server.deleteSkill)
 	api.GET("/skills/search", server.searchSkills)
-	api.GET("/share/:name", server.getShareURL)
 
 	// Serve UI
 	uiFS, err := fs.Sub(uiFiles, "ui")

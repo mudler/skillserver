@@ -53,6 +53,31 @@ func setupLogger(enable bool) *log.Logger {
 	return log.New(writer, "", log.LstdFlags)
 }
 
+// extractRepoName extracts a repository name from a URL (same logic as GitSyncer)
+func extractRepoName(repoURL string) string {
+	// Remove protocol and .git suffix
+	name := strings.TrimSuffix(repoURL, ".git")
+
+	// Extract last part of path
+	parts := strings.Split(name, "/")
+	if len(parts) > 0 {
+		name = parts[len(parts)-1]
+	}
+
+	// Remove protocol prefix if present
+	if strings.Contains(name, "://") {
+		parts = strings.Split(name, "://")
+		if len(parts) > 1 {
+			parts = strings.Split(parts[1], "/")
+			if len(parts) > 0 {
+				name = parts[len(parts)-1]
+			}
+		}
+	}
+
+	return name
+}
+
 func main() {
 	// Get default values from environment variables
 	defaultDir := getEnvOrDefault("SKILLSERVER_DIR", getEnvOrDefault("SKILLS_DIR", "./skills"))
@@ -90,8 +115,17 @@ func main() {
 		}
 	}
 
+	// Extract git repo names from URLs for read-only detection
+	var gitRepoNames []string
+	for _, repoURL := range gitRepos {
+		repoName := extractRepoName(repoURL)
+		if repoName != "" {
+			gitRepoNames = append(gitRepoNames, repoName)
+		}
+	}
+
 	// Initialize skill manager
-	skillManager, err := domain.NewFileSystemManager(finalDir)
+	skillManager, err := domain.NewFileSystemManager(finalDir, gitRepoNames)
 	if err != nil {
 		log.Fatalf("Failed to initialize skill manager: %v", err)
 	}

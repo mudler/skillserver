@@ -37,7 +37,7 @@ func NewServer(skillManager domain.SkillManager) *Server {
 
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name:        "read_skill",
-		Description: "Read the full content of a skill by filename",
+		Description: "Read the full content of a skill by its ID (use the 'id' field returned by list_skills or search_skills)",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ReadSkillInput) (
 		*mcp.CallToolResult,
 		ReadSkillOutput,

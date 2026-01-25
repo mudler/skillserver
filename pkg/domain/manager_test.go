@@ -23,7 +23,7 @@ var _ = Describe("SkillManager", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// Initialize the manager
-		manager, err = domain.NewFileSystemManager(tempDir)
+		manager, err = domain.NewFileSystemManager(tempDir, []string{})
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -130,7 +130,6 @@ Content here.`
 			skill, err := manager.ReadSkill("docker")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(skill.Metadata).NotTo(BeNil())
-			Expect(skill.Metadata.Tags).To(ContainElements("docker", "containers"))
 			Expect(skill.Metadata.Description).To(Equal("A guide to Docker"))
 		})
 

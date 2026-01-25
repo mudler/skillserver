@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/blevesearch/bleve/v2"
 )
@@ -59,8 +58,12 @@ func (s *Searcher) IndexSkills(skills []Skill) error {
 			if skill.Metadata.Description != "" {
 				doc["description"] = skill.Metadata.Description
 			}
-			if len(skill.Metadata.Tags) > 0 {
-				doc["tags"] = strings.Join(skill.Metadata.Tags, " ")
+			// Index metadata fields if present
+			if skill.Metadata.License != "" {
+				doc["license"] = skill.Metadata.License
+			}
+			if skill.Metadata.Compatibility != "" {
+				doc["compatibility"] = skill.Metadata.Compatibility
 			}
 		}
 		if err := index.Index(skill.Name, doc); err != nil {
@@ -87,10 +90,13 @@ func (s *Searcher) Search(query string) ([]Skill, error) {
 	descQuery := bleve.NewMatchQuery(query)
 	descQuery.SetField("description")
 
-	tagsQuery := bleve.NewMatchQuery(query)
-	tagsQuery.SetField("tags")
+	licenseQuery := bleve.NewMatchQuery(query)
+	licenseQuery.SetField("license")
 
-	disjunction := bleve.NewDisjunctionQuery(contentQuery, nameQuery, descQuery, tagsQuery)
+	compatibilityQuery := bleve.NewMatchQuery(query)
+	compatibilityQuery.SetField("compatibility")
+
+	disjunction := bleve.NewDisjunctionQuery(contentQuery, nameQuery, descQuery, licenseQuery, compatibilityQuery)
 
 	req := bleve.NewSearchRequest(disjunction)
 	req.Size = 100 // Limit results
@@ -102,8 +108,10 @@ func (s *Searcher) Search(query string) ([]Skill, error) {
 
 	var skills []Skill
 	for _, hit := range searchResults.Hits {
+		// The hit.ID is the skill name/ID used for indexing
 		skills = append(skills, Skill{
 			Name: hit.ID,
+			ID:   hit.ID, // ID is the same as Name
 		})
 	}
 
