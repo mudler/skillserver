@@ -1,22 +1,35 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SkillServer</title>
+    <title>skillserver</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+        }
+    </script>
     <link rel="stylesheet" href="/style.css">
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
-<body>
-    <div x-data="skillServer()" x-init="loadSkills(); initKeyboardShortcuts()" @keydown.window="handleKeyboardShortcut($event)" class="container">
-        <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors">
+    <div x-data="skillServer()" x-init="initTheme(); loadSkills(); initKeyboardShortcuts()" @keydown.window="handleKeyboardShortcut($event)" class="container">
+        <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-gray-800 rounded-lg shadow p-5">
             <div class="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity" @click="cancelEdit()">
-                <img src="/images/logo.png" alt="SkillServer Logo" class="h-8 sm:h-10 w-auto">
-                <h1 class="text-2xl sm:text-3xl">SkillServer</h1>
+                <img src="/images/logo.png" alt="SkillServer Logo" class="h-20 sm:h-24 w-auto dark:brightness-150 dark:contrast-125 dark:drop-shadow-lg">
+                <!--<h1 class="text-2xl sm:text-3xl text-blue-600 dark:text-blue-400">SkillServer</h1>-->
             </div>
-            <div class="header-actions w-full sm:w-auto">
+            <div class="header-actions flex items-center gap-3 w-full sm:w-auto">
+                <button 
+                    @click="toggleTheme()"
+                    class="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                    title="Toggle theme"
+                >
+                    <i x-show="isDark" class="fas fa-sun text-yellow-500"></i>
+                    <i x-show="!isDark" class="fas fa-moon text-gray-600 dark:text-gray-300"></i>
+                </button>
                 <button @click="showEditor = true; editingSkill = null; skillContent = ''; skillName = ''; skillDescription = ''; skillLicense = ''; skillCompatibility = ''; nameValidationError = ''" class="btn btn-primary">
                     <i class="fas fa-plus mr-2"></i>New Skill
                 </button>
@@ -25,23 +38,23 @@
 
         <!-- Search Bar -->
         <div class="search-bar relative">
-            <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+            <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500"></i>
             <input 
                 type="text" 
                 x-model="searchQuery" 
                 @input="searchSkills()"
                 placeholder="Search skills..."
-                class="search-input pl-10 pr-20"
+                class="search-input pl-10 pr-20 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100"
                 id="search-input"
             >
             <button 
                 x-show="searchQuery"
                 @click="searchQuery = ''; searchSkills()"
-                class="absolute right-10 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                class="absolute right-10 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
             >
                 <i class="fas fa-times"></i>
             </button>
-            <div x-show="searchQuery && filteredSkills.length > 0" class="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-gray-500">
+            <div x-show="searchQuery && filteredSkills.length > 0" class="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-gray-500 dark:text-gray-400">
                 <span x-text="filteredSkills.length"></span> result<span x-show="filteredSkills.length !== 1">s</span>
             </div>
         </div>
@@ -49,14 +62,14 @@
         <!-- Skills List -->
         <div class="skills-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" x-show="!showEditor">
             <template x-for="skill in filteredSkills" :key="skill.name">
-                <div class="skill-card" @click="editSkill(skill)">
+                <div class="skill-card bg-white dark:bg-gray-800 hover:shadow-lg dark:hover:shadow-gray-700/50" @click="editSkill(skill)">
                     <div class="skill-card-header">
-                        <h3 x-text="skill.name"></h3>
-                        <span x-show="skill.readOnly" class="read-only-badge">
+                        <h3 class="text-blue-600 dark:text-blue-400" x-text="skill.name"></h3>
+                        <span x-show="skill.readOnly" class="read-only-badge bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300">
                             <i class="fas fa-lock mr-1"></i>Read-only
                         </span>
                     </div>
-                    <p x-text="skill.description || 'No description'" class="skill-description"></p>
+                    <p x-text="skill.description || 'No description'" class="skill-description text-gray-600 dark:text-gray-400"></p>
                     <div class="skill-actions">
                         <button x-show="!skill.readOnly" @click.stop="deleteSkill(skill.name)" class="btn btn-small btn-danger">
                             <i class="fas fa-trash mr-1"></i>Delete
@@ -65,9 +78,9 @@
                 </div>
             </template>
             <div x-show="filteredSkills.length === 0" class="empty-state">
-                <i class="fas fa-inbox text-6xl mb-4 text-gray-300"></i>
-                <p class="text-xl mb-2">No skills found</p>
-                <p class="text-gray-500 mb-4">Create your first skill to get started!</p>
+                <i class="fas fa-inbox text-6xl mb-4 text-gray-300 dark:text-gray-600"></i>
+                <p class="text-xl mb-2 text-gray-900 dark:text-gray-100">No skills found</p>
+                <p class="text-gray-500 dark:text-gray-400 mb-4">Create your first skill to get started!</p>
                 <button @click="showEditor = true; editingSkill = null; skillContent = ''; skillName = ''; skillDescription = ''; skillLicense = ''; skillCompatibility = ''; nameValidationError = ''" class="btn btn-primary">
                     <i class="fas fa-plus mr-2"></i>Create Skill
                 </button>
@@ -75,9 +88,9 @@
         </div>
 
         <!-- Editor -->
-        <div class="editor" x-show="showEditor">
-            <div class="editor-header flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <h2 class="text-xl sm:text-2xl" x-text="editingSkill ? 'Edit Skill' : 'New Skill'"></h2>
+        <div class="editor bg-white dark:bg-gray-800" x-show="showEditor">
+            <div class="editor-header flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-200 dark:border-gray-700">
+                <h2 class="text-xl sm:text-2xl text-blue-600 dark:text-blue-400" x-text="editingSkill ? 'Edit Skill' : 'New Skill'"></h2>
                 <div x-show="!editingSkill || !editingSkill.readOnly" class="editor-actions flex gap-2 w-full sm:w-auto">
                     <button @click="saveSkill()" class="btn btn-primary" :disabled="isLoading">
                         <i x-show="!isLoading" class="fas fa-save mr-2"></i>
@@ -88,16 +101,16 @@
                     </button>
                 </div>
             </div>
-            <div x-show="editingSkill && editingSkill.readOnly" class="read-only-warning">
+            <div x-show="editingSkill && editingSkill.readOnly" class="read-only-warning bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-800 dark:text-yellow-300">
                 <i class="fas fa-lock mr-2"></i><strong>Read-only:</strong> This skill is from a git repository and cannot be edited.
             </div>
             
             <!-- Tabs -->
-            <div class="tabs flex gap-2 overflow-x-auto" x-show="editingSkill !== null">
-                <button @click="activeTab = 'content'" :class="{'tab': true, 'active': activeTab === 'content'}">
+            <div class="tabs flex gap-2 overflow-x-auto border-b border-gray-200 dark:border-gray-700" x-show="editingSkill !== null">
+                <button @click="activeTab = 'content'" :class="{'tab': true, 'active': activeTab === 'content', 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400': activeTab === 'content', 'text-gray-600 dark:text-gray-400': activeTab !== 'content'}">
                     <i class="fas fa-file-alt mr-2"></i>Content
                 </button>
-                <button @click="activeTab = 'resources'; loadResources()" :class="{'tab': true, 'active': activeTab === 'resources'}" :disabled="!editingSkill">
+                <button @click="activeTab = 'resources'; loadResources()" :class="{'tab': true, 'active': activeTab === 'resources', 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400': activeTab === 'resources', 'text-gray-600 dark:text-gray-400': activeTab !== 'resources'}" :disabled="!editingSkill">
                     <i class="fas fa-folder mr-2"></i>Resources
                 </button>
             </div>
@@ -117,7 +130,7 @@
                                 'border-red-500': nameValidationError,
                                 'border-green-500': !nameValidationError && skillName && skillName.trim().length > 0
                             }"
-                            class="skill-name-input full-width pr-10"
+                            class="skill-name-input full-width pr-10 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100"
                         >
                         <i 
                             x-show="nameValidationError"
@@ -142,7 +155,7 @@
                             'border-red-500': skillDescription.length > 1024 || (skillDescription.length === 0 && skillDescription.trim().length === 0),
                             'border-green-500': skillDescription.length > 0 && skillDescription.length <= 1024
                         }"
-                        class="form-textarea"
+                        class="form-textarea bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100"
                     ></textarea>
                     <div class="flex justify-between items-center mt-1">
                         <span class="text-xs text-gray-500 flex items-center gap-1">
@@ -215,7 +228,7 @@
                             class="editor-textarea"
                         ></textarea>
                     </div>
-                    <div x-show="markdownPreview" class="editor-textarea bg-gray-50 overflow-auto" x-html="renderMarkdown(skillContent)"></div>
+                    <div x-show="markdownPreview" class="editor-textarea bg-gray-50 dark:bg-gray-900 overflow-auto text-gray-900 dark:text-gray-100" x-html="renderMarkdown(skillContent)"></div>
                 </div>
             </div>
             
@@ -229,17 +242,17 @@
                         </button>
                     </div>
                     <div 
-                        class="resource-list"
+                        class="resource-list bg-gray-50 dark:bg-gray-900/50"
                         @dragover.prevent="dragOverType = 'script'"
                         @dragleave.prevent="if (event.relatedTarget === null || !event.currentTarget.contains(event.relatedTarget)) dragOverType = null"
                         @drop.prevent="handleDrop($event, 'script')"
-                        :class="{'border-2 border-blue-500 border-dashed bg-blue-50': dragOverType === 'script'}"
+                        :class="{'border-2 border-blue-500 dark:border-blue-400 border-dashed bg-blue-50 dark:bg-blue-900/30': dragOverType === 'script'}"
                     >
                         <template x-for="resource in resources.scripts" :key="resource.path">
-                            <div class="resource-item flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                            <div class="resource-item flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700">
                                 <div class="resource-item-info flex-1 min-w-0" @click="viewResource(resource, 'script')">
-                                    <div class="resource-item-name" x-text="resource.name"></div>
-                                    <div class="resource-item-meta" x-text="`${formatSize(resource.size)} • ${resource.mime_type}`"></div>
+                                    <div class="resource-item-name text-gray-900 dark:text-gray-100" x-text="resource.name"></div>
+                                    <div class="resource-item-meta text-gray-600 dark:text-gray-400" x-text="`${formatSize(resource.size)} • ${resource.mime_type}`"></div>
                                 </div>
                                 <div class="resource-item-actions flex gap-2">
                                     <button @click.stop="deleteResource(resource.path)" class="btn btn-small btn-danger" :disabled="editingSkill && editingSkill.readOnly">
@@ -248,8 +261,8 @@
                                 </div>
                             </div>
                         </template>
-                        <div x-show="!resources.scripts || resources.scripts.length === 0" class="empty-resource-state">
-                            <i class="fas fa-code text-4xl mb-2 text-gray-300"></i>
+                        <div x-show="!resources.scripts || resources.scripts.length === 0" class="empty-resource-state text-gray-500 dark:text-gray-400">
+                            <i class="fas fa-code text-4xl mb-2 text-gray-300 dark:text-gray-600"></i>
                             <p>No scripts</p>
                         </div>
                     </div>
@@ -282,8 +295,8 @@
                                 </div>
                             </div>
                         </template>
-                        <div x-show="!resources.references || resources.references.length === 0" class="empty-resource-state">
-                            <i class="fas fa-book text-4xl mb-2 text-gray-300"></i>
+                        <div x-show="!resources.references || resources.references.length === 0" class="empty-resource-state text-gray-500 dark:text-gray-400">
+                            <i class="fas fa-book text-4xl mb-2 text-gray-300 dark:text-gray-600"></i>
                             <p>No references</p>
                         </div>
                     </div>
@@ -316,8 +329,8 @@
                                 </div>
                             </div>
                         </template>
-                        <div x-show="!resources.assets || resources.assets.length === 0" class="empty-resource-state">
-                            <i class="fas fa-image text-4xl mb-2 text-gray-300"></i>
+                        <div x-show="!resources.assets || resources.assets.length === 0" class="empty-resource-state text-gray-500 dark:text-gray-400">
+                            <i class="fas fa-image text-4xl mb-2 text-gray-300 dark:text-gray-600"></i>
                             <p>No assets</p>
                         </div>
                     </div>
@@ -334,20 +347,20 @@
         >
             <div 
                 @click.stop
-                class="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
+                class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
             >
-                <h3 class="text-lg font-semibold mb-4 text-gray-900">Confirm</h3>
-                <p class="text-gray-700 mb-6" x-text="confirmModal.message"></p>
+                <h3 class="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">Confirm</h3>
+                <p class="text-gray-700 dark:text-gray-300 mb-6" x-text="confirmModal.message"></p>
                 <div class="flex gap-3 justify-end">
                     <button 
                         @click="confirmModal.show = false; if (confirmModal.callback) { confirmModal.callback(false); confirmModal.callback = null; }"
-                        class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition"
+                        class="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition"
                     >
                         Cancel
                     </button>
                     <button 
                         @click="confirmModal.show = false; if (confirmModal.callback) { confirmModal.callback(true); confirmModal.callback = null; }"
-                        class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition"
+                        class="px-4 py-2 bg-red-600 dark:bg-red-500 text-white rounded hover:bg-red-700 dark:hover:bg-red-600 transition"
                     >
                         Confirm
                     </button>
@@ -364,15 +377,15 @@
         >
             <div 
                 @click.stop
-                class="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col"
+                class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col"
             >
-                <div class="flex justify-between items-center p-4 border-b">
-                    <h3 class="text-lg font-semibold">
+                <div class="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
                         <i class="fas fa-edit mr-2"></i>Edit <span x-text="resourceEditorModal.name"></span>
                     </h3>
                     <button 
                         @click="resourceEditorModal.show = false"
-                        class="text-gray-400 hover:text-gray-600"
+                        class="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
                     >
                         <i class="fas fa-times"></i>
                     </button>
@@ -380,20 +393,20 @@
                 <div class="flex-1 overflow-auto p-4">
                     <textarea 
                         x-model="resourceEditorModal.content"
-                        class="w-full h-full min-h-[400px] p-3 border border-gray-300 rounded font-mono text-sm"
+                        class="w-full h-full min-h-[400px] p-3 border border-gray-300 dark:border-gray-600 rounded font-mono text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                         style="font-family: 'Monaco', 'Courier New', monospace;"
                     ></textarea>
                 </div>
-                <div class="flex justify-end gap-3 p-4 border-t">
+                <div class="flex justify-end gap-3 p-4 border-t border-gray-200 dark:border-gray-700">
                     <button 
                         @click="resourceEditorModal.show = false"
-                        class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition"
+                        class="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition"
                     >
                         Cancel
                     </button>
                     <button 
                         @click="saveResourceContent()"
-                        class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+                        class="px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded hover:bg-blue-700 dark:hover:bg-blue-600 transition"
                     >
                         <i class="fas fa-save mr-2"></i>Save
                     </button>
@@ -473,6 +486,30 @@
                     message: '',
                     callback: null
                 },
+                isDark: true,
+
+                initTheme() {
+                    // Check localStorage or default to dark
+                    const savedTheme = localStorage.getItem('theme');
+                    if (savedTheme === 'light') {
+                        this.isDark = false;
+                        document.documentElement.classList.remove('dark');
+                    } else {
+                        this.isDark = true;
+                        document.documentElement.classList.add('dark');
+                    }
+                },
+
+                toggleTheme() {
+                    this.isDark = !this.isDark;
+                    if (this.isDark) {
+                        document.documentElement.classList.add('dark');
+                        localStorage.setItem('theme', 'dark');
+                    } else {
+                        document.documentElement.classList.remove('dark');
+                        localStorage.setItem('theme', 'light');
+                    }
+                },
 
                 showToast(message, type = 'info') {
                     const toast = {
@@ -547,16 +584,16 @@
                 },
 
                 renderMarkdown(text) {
-                    if (!text) return '<p class="text-gray-400 italic">No content to preview</p>';
+                    if (!text) return '<p class="text-gray-400 dark:text-gray-500 italic">No content to preview</p>';
                     // Simple markdown rendering
                     let html = text
-                        .replace(/^# (.*$)/gim, '<h1 class="text-2xl font-bold mb-2 mt-4">$1</h1>')
-                        .replace(/^## (.*$)/gim, '<h2 class="text-xl font-bold mb-2 mt-3">$1</h2>')
-                        .replace(/^### (.*$)/gim, '<h3 class="text-lg font-bold mb-2 mt-2">$1</h3>')
+                        .replace(/^# (.*$)/gim, '<h1 class="text-2xl font-bold mb-2 mt-4 text-gray-900 dark:text-gray-100">$1</h1>')
+                        .replace(/^## (.*$)/gim, '<h2 class="text-xl font-bold mb-2 mt-3 text-gray-900 dark:text-gray-100">$1</h2>')
+                        .replace(/^### (.*$)/gim, '<h3 class="text-lg font-bold mb-2 mt-2 text-gray-900 dark:text-gray-100">$1</h3>')
                         .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
                         .replace(/\*(.*?)\*/gim, '<em>$1</em>')
-                        .replace(/`(.*?)`/gim, '<code class="bg-gray-200 px-1 rounded">$1</code>')
-                        .replace(/```([\s\S]*?)```/gim, '<pre class="bg-gray-100 p-3 rounded my-2 overflow-x-auto"><code>$1</code></pre>')
+                        .replace(/`(.*?)`/gim, '<code class="bg-gray-200 dark:bg-gray-700 px-1 rounded text-gray-900 dark:text-gray-100">$1</code>')
+                        .replace(/```([\s\S]*?)```/gim, '<pre class="bg-gray-100 dark:bg-gray-800 p-3 rounded my-2 overflow-x-auto text-gray-900 dark:text-gray-100"><code>$1</code></pre>')
                         .replace(/\n/gim, '<br>');
                     return html;
                 },
