@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="pkg/web/ui/images/logo.png" alt="SkillServer Logo" width="200">
+</div>
+
 # skillserver
 
 An MCP/REST server with WebUI serving as a centralized skills database for AI Agents. It manages "Skills" (directory-based with SKILL.md files) stored in a local directory, following the [Agent Skills specification](https://agentskills.io).
