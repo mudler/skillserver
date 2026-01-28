@@ -943,21 +943,26 @@ type UpdateGitRepoRequest struct {
 
 // listGitRepos lists all configured git repositories
 func (s *Server) listGitRepos(c *echo.Context) error {
-	if s.gitSyncer == nil {
+	if s.configManager == nil {
 		return c.JSON(http.StatusOK, []GitRepoResponse{})
 	}
 
-	// Get repos from syncer
-	repoURLs := s.gitSyncer.GetRepos()
+	// Load repos from config file
+	configRepos, err := s.configManager.LoadConfig()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": fmt.Sprintf("failed to load config: %v", err),
+		})
+	}
 
 	// Convert to response format
-	repos := make([]GitRepoResponse, len(repoURLs))
-	for i, url := range repoURLs {
+	repos := make([]GitRepoResponse, len(configRepos))
+	for i, repo := range configRepos {
 		repos[i] = GitRepoResponse{
-			ID:      git.GenerateID(url),
-			URL:     url,
-			Name:    git.ExtractRepoName(url),
-			Enabled: true, // All repos in syncer are enabled
+			ID:      repo.ID,
+			URL:     repo.URL,
+			Name:    repo.Name,
+			Enabled: repo.Enabled,
 		}
 	}
 
@@ -992,38 +997,68 @@ func (s *Server) addGitRepo(c *echo.Context) error {
 		})
 	}
 
-	// Add repo to syncer
-	if err := s.gitSyncer.AddRepo(req.URL); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": err.Error(),
+	// Load current config
+	configRepos, err := s.configManager.LoadConfig()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": fmt.Sprintf("failed to load config: %v", err),
 		})
 	}
 
-	// Update FileSystemManager's git repos list for read-only detection
-	if s.fsManager != nil {
-		repos := s.gitSyncer.GetRepos()
-		gitRepoNames := make([]string, len(repos))
-		for i, url := range repos {
-			gitRepoNames[i] = git.ExtractRepoName(url)
+	// Check if repo already exists
+	for _, repo := range configRepos {
+		if repo.URL == req.URL {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": "repository already exists",
+			})
 		}
-		s.fsManager.UpdateGitRepos(gitRepoNames)
 	}
 
+	// Add new repo to config (enabled by default)
+	newRepo := git.GitRepoConfig{
+		ID:      git.GenerateID(req.URL),
+		URL:     req.URL,
+		Name:    git.ExtractRepoName(req.URL),
+		Enabled: true,
+	}
+	configRepos = append(configRepos, newRepo)
+
 	// Save config
-	if s.configManager != nil {
-		repos := s.gitSyncer.GetRepos()
-		configs := make([]git.GitRepoConfig, len(repos))
-		for i, url := range repos {
-			configs[i] = git.GitRepoConfig{
-				ID:      git.GenerateID(url),
-				URL:     url,
-				Name:    git.ExtractRepoName(url),
-				Enabled: true,
+	if err := s.configManager.SaveConfig(configRepos); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": fmt.Sprintf("failed to save config: %v", err),
+		})
+	}
+
+	// Add repo to syncer and update FileSystemManager
+	if s.gitSyncer != nil {
+		if err := s.gitSyncer.AddRepo(req.URL); err != nil {
+			// Remove from config if sync failed
+			for i, repo := range configRepos {
+				if repo.URL == req.URL {
+					configRepos = append(configRepos[:i], configRepos[i+1:]...)
+					s.configManager.SaveConfig(configRepos)
+					break
+				}
 			}
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": err.Error(),
+			})
 		}
-		if err := s.configManager.SaveConfig(configs); err != nil {
-			// Log error but don't fail the request
-			fmt.Printf("Warning: failed to save config: %v\n", err)
+
+		// Update FileSystemManager's git repos list for read-only detection
+		if s.fsManager != nil {
+			enabledRepos := make([]string, 0)
+			for _, repo := range configRepos {
+				if repo.Enabled {
+					enabledRepos = append(enabledRepos, repo.URL)
+				}
+			}
+			gitRepoNames := make([]string, len(enabledRepos))
+			for i, url := range enabledRepos {
+				gitRepoNames[i] = git.ExtractRepoName(url)
+			}
+			s.fsManager.UpdateGitRepos(gitRepoNames)
 		}
 	}
 
@@ -1114,11 +1149,74 @@ func (s *Server) updateGitRepo(c *echo.Context) error {
 		}
 	}
 
-	response := GitRepoResponse{
-		ID:      git.GenerateID(foundURL),
-		URL:     foundURL,
-		Name:    git.ExtractRepoName(foundURL),
-		Enabled: req.Enabled,
+	// Load current config
+	configRepos, err := s.configManager.LoadConfig()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": fmt.Sprintf("failed to load config: %v", err),
+		})
+	}
+
+	// Update enabled status for the repo
+	for i := range configRepos {
+		if configRepos[i].ID == id {
+			configRepos[i].Enabled = req.Enabled
+			break
+		}
+	}
+
+	// Save updated config
+	if err := s.configManager.SaveConfig(configRepos); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": fmt.Sprintf("failed to save config: %v", err),
+		})
+	}
+
+	// Update syncer and FileSystemManager based on enabled repos
+	if s.gitSyncer != nil {
+		enabledRepos := make([]string, 0)
+		for _, repo := range configRepos {
+			if repo.Enabled {
+				enabledRepos = append(enabledRepos, repo.URL)
+			}
+		}
+		
+		// Update syncer repos
+		if err := s.gitSyncer.UpdateRepos(enabledRepos); err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"error": fmt.Sprintf("failed to update syncer: %v", err),
+			})
+		}
+
+		// Update FileSystemManager's git repos list
+		if s.fsManager != nil {
+			gitRepoNames := make([]string, len(enabledRepos))
+			for i, url := range enabledRepos {
+				gitRepoNames[i] = git.ExtractRepoName(url)
+			}
+			s.fsManager.UpdateGitRepos(gitRepoNames)
+		}
+
+		// Rebuild index
+		if err := s.skillManager.RebuildIndex(); err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"error": "failed to rebuild index",
+			})
+		}
+	}
+
+	// Find updated repo for response
+	var response GitRepoResponse
+	for _, repo := range configRepos {
+		if repo.ID == id {
+			response = GitRepoResponse{
+				ID:      repo.ID,
+				URL:     repo.URL,
+				Name:    repo.Name,
+				Enabled: repo.Enabled,
+			}
+			break
+		}
 	}
 
 	return c.JSON(http.StatusOK, response)
@@ -1134,24 +1232,53 @@ func (s *Server) deleteGitRepo(c *echo.Context) error {
 
 	id := c.Param("id")
 
+	if s.configManager == nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "config manager not available",
+		})
+	}
+
+	// Load current config
+	configRepos, err := s.configManager.LoadConfig()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": fmt.Sprintf("failed to load config: %v", err),
+		})
+	}
+
 	// Find repo by ID
-	repos := s.gitSyncer.GetRepos()
-	var foundURL string
-	for _, url := range repos {
-		if git.GenerateID(url) == id {
-			foundURL = url
+	var foundRepo *git.GitRepoConfig
+	for _, repo := range configRepos {
+		if repo.ID == id {
+			foundRepo = &repo
 			break
 		}
 	}
 
-	if foundURL == "" {
+	if foundRepo == nil {
 		return c.JSON(http.StatusNotFound, map[string]string{
 			"error": "repository not found",
 		})
 	}
 
 	// Get repo name to delete the directory
-	repoName := git.ExtractRepoName(foundURL)
+	repoName := foundRepo.Name
+	foundURL := foundRepo.URL
+
+	// Remove repo from config (we already have configRepos loaded above)
+	updatedConfigs := make([]git.GitRepoConfig, 0, len(configRepos)-1)
+	for _, repo := range configRepos {
+		if repo.ID != id {
+			updatedConfigs = append(updatedConfigs, repo)
+		}
+	}
+
+	// Save updated config
+	if err := s.configManager.SaveConfig(updatedConfigs); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": fmt.Sprintf("failed to save config: %v", err),
+		})
+	}
 
 	// Remove repo from syncer
 	if err := s.gitSyncer.RemoveRepo(foundURL); err != nil {
@@ -1170,29 +1297,17 @@ func (s *Server) deleteGitRepo(c *echo.Context) error {
 
 	// Update FileSystemManager's git repos list for read-only detection
 	if s.fsManager != nil {
-		repos := s.gitSyncer.GetRepos()
-		gitRepoNames := make([]string, len(repos))
-		for i, url := range repos {
+		enabledRepos := make([]string, 0)
+		for _, repo := range updatedConfigs {
+			if repo.Enabled {
+				enabledRepos = append(enabledRepos, repo.URL)
+			}
+		}
+		gitRepoNames := make([]string, len(enabledRepos))
+		for i, url := range enabledRepos {
 			gitRepoNames[i] = git.ExtractRepoName(url)
 		}
 		s.fsManager.UpdateGitRepos(gitRepoNames)
-	}
-
-	// Save config
-	if s.configManager != nil {
-		repos := s.gitSyncer.GetRepos()
-		configs := make([]git.GitRepoConfig, len(repos))
-		for i, url := range repos {
-			configs[i] = git.GitRepoConfig{
-				ID:      git.GenerateID(url),
-				URL:     url,
-				Name:    git.ExtractRepoName(url),
-				Enabled: true,
-			}
-		}
-		if err := s.configManager.SaveConfig(configs); err != nil {
-			fmt.Printf("Warning: failed to save config: %v\n", err)
-		}
 	}
 
 	// Trigger re-indexing
@@ -1207,42 +1322,140 @@ func (s *Server) deleteGitRepo(c *echo.Context) error {
 
 // syncGitRepo manually syncs a git repository
 func (s *Server) syncGitRepo(c *echo.Context) error {
-	if s.gitSyncer == nil {
+	if s.gitSyncer == nil || s.configManager == nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "git syncer not available",
+			"error": "git syncer or config manager not available",
 		})
 	}
 
 	id := c.Param("id")
 
+	// Load config to find repo
+	configRepos, err := s.configManager.LoadConfig()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": fmt.Sprintf("failed to load config: %v", err),
+		})
+	}
+
 	// Find repo by ID
-	repos := s.gitSyncer.GetRepos()
-	var foundURL string
-	for _, url := range repos {
-		if git.GenerateID(url) == id {
-			foundURL = url
+	var foundRepo *git.GitRepoConfig
+	for _, repo := range configRepos {
+		if repo.ID == id {
+			foundRepo = &repo
 			break
 		}
 	}
 
-	if foundURL == "" {
+	if foundRepo == nil {
 		return c.JSON(http.StatusNotFound, map[string]string{
 			"error": "repository not found",
 		})
 	}
 
+	// Check if repo is enabled
+	if !foundRepo.Enabled {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "cannot sync disabled repository",
+		})
+	}
+
 	// Sync the repo
-	if err := s.gitSyncer.SyncRepo(foundURL); err != nil {
+	if err := s.gitSyncer.SyncRepo(foundRepo.URL); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": err.Error(),
 		})
 	}
 
 	response := GitRepoResponse{
-		ID:      git.GenerateID(foundURL),
-		URL:     foundURL,
-		Name:    git.ExtractRepoName(foundURL),
-		Enabled: true,
+		ID:      foundRepo.ID,
+		URL:     foundRepo.URL,
+		Name:    foundRepo.Name,
+		Enabled: foundRepo.Enabled,
+	}
+
+	return c.JSON(http.StatusOK, response)
+}
+
+// toggleGitRepo toggles the enabled status of a git repository
+func (s *Server) toggleGitRepo(c *echo.Context) error {
+	if s.configManager == nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "config manager not available",
+		})
+	}
+
+	id := c.Param("id")
+
+	// Load current config
+	configRepos, err := s.configManager.LoadConfig()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": fmt.Sprintf("failed to load config: %v", err),
+		})
+	}
+
+	// Find and toggle the repo
+	var foundRepo *git.GitRepoConfig
+	for i := range configRepos {
+		if configRepos[i].ID == id {
+			configRepos[i].Enabled = !configRepos[i].Enabled
+			foundRepo = &configRepos[i]
+			break
+		}
+	}
+
+	if foundRepo == nil {
+		return c.JSON(http.StatusNotFound, map[string]string{
+			"error": "repository not found",
+		})
+	}
+
+	// Save updated config
+	if err := s.configManager.SaveConfig(configRepos); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": fmt.Sprintf("failed to save config: %v", err),
+		})
+	}
+
+	// Update syncer and FileSystemManager based on enabled repos
+	if s.gitSyncer != nil {
+		enabledRepos := make([]string, 0)
+		for _, repo := range configRepos {
+			if repo.Enabled {
+				enabledRepos = append(enabledRepos, repo.URL)
+			}
+		}
+		
+		// Update syncer repos
+		if err := s.gitSyncer.UpdateRepos(enabledRepos); err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"error": fmt.Sprintf("failed to update syncer: %v", err),
+			})
+		}
+
+		// Update FileSystemManager's git repos list
+		if s.fsManager != nil {
+			gitRepoNames := make([]string, len(enabledRepos))
+			for i, url := range enabledRepos {
+				gitRepoNames[i] = git.ExtractRepoName(url)
+			}
+			s.fsManager.UpdateGitRepos(gitRepoNames)
+		}
+
+		// Rebuild index
+		if err := s.skillManager.RebuildIndex(); err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"error": "failed to rebuild index",
+			})
+		}
+	}
+
+	response := GitRepoResponse{
+		ID:      foundRepo.ID,
+		URL:     foundRepo.URL,
+		Name:    foundRepo.Name,
+		Enabled: foundRepo.Enabled,
 	}
 
 	return c.JSON(http.StatusOK, response)

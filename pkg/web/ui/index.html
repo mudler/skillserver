@@ -518,14 +518,37 @@
                         <template x-for="repo in gitRepos" :key="repo.id">
                             <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
                                 <div class="flex-1 min-w-0">
-                                    <div class="font-medium text-gray-900 dark:text-gray-100" x-text="repo.name"></div>
+                                    <div class="flex items-center gap-2">
+                                        <div class="font-medium text-gray-900 dark:text-gray-100" x-text="repo.name"></div>
+                                        <span 
+                                            x-show="repo.enabled" 
+                                            class="px-2 py-0.5 text-xs rounded bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300"
+                                        >
+                                            Enabled
+                                        </span>
+                                        <span 
+                                            x-show="!repo.enabled" 
+                                            class="px-2 py-0.5 text-xs rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+                                        >
+                                            Disabled
+                                        </span>
+                                    </div>
                                     <div class="text-sm text-gray-600 dark:text-gray-400 truncate" x-text="repo.url"></div>
                                 </div>
                                 <div class="flex gap-2 ml-4">
                                     <button 
+                                        @click="toggleGitRepo(repo.id)"
+                                        class="btn btn-small"
+                                        :class="repo.enabled ? 'btn-secondary' : 'btn-primary'"
+                                        :disabled="isLoading"
+                                        :title="repo.enabled ? 'Disable repository' : 'Enable repository'"
+                                    >
+                                        <i :class="repo.enabled ? 'fa-toggle-on' : 'fa-toggle-off'" class="fas"></i>
+                                    </button>
+                                    <button 
                                         @click="syncGitRepo(repo.id)"
                                         class="btn btn-small btn-secondary"
-                                        :disabled="isLoading"
+                                        :disabled="isLoading || !repo.enabled"
                                         title="Sync repository"
                                     >
                                         <i class="fas fa-sync"></i>
@@ -1390,6 +1413,32 @@
                     } catch (error) {
                         console.error('Sync repo failed:', error);
                         this.showToast('Failed to sync repository', 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                async toggleGitRepo(id) {
+                    this.isLoading = true;
+                    try {
+                        const response = await fetch(`/api/git-repos/${id}/toggle`, {
+                            method: 'POST',
+                        });
+
+                        if (response.ok) {
+                            const updatedRepo = await response.json();
+                            await this.loadGitRepos();
+                            const status = updatedRepo.enabled ? 'enabled' : 'disabled';
+                            this.showToast(`Repository ${status} successfully`, 'success');
+                            // Reload skills to reflect changes
+                            await this.loadSkills();
+                        } else {
+                            const error = await response.json();
+                            this.showToast('Failed to toggle repository: ' + (error.error || 'Unknown error'), 'error');
+                        }
+                    } catch (error) {
+                        console.error('Toggle repo failed:', error);
+                        this.showToast('Failed to toggle repository', 'error');
                     } finally {
                         this.isLoading = false;
                     }

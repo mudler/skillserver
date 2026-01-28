@@ -81,6 +81,7 @@ func NewServer(skillManager domain.SkillManager, fsManager *domain.FileSystemMan
 	api.PUT("/git-repos/:id", server.updateGitRepo)
 	api.DELETE("/git-repos/:id", server.deleteGitRepo)
 	api.POST("/git-repos/:id/sync", server.syncGitRepo)
+	api.POST("/git-repos/:id/toggle", server.toggleGitRepo)
 
 	// Serve UI
 	uiFS, err := fs.Sub(uiFiles, "ui")
