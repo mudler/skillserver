@@ -120,16 +120,15 @@ func (m *FileSystemManager) ListSkills() ([]Skill, error) {
 		// Determine skill name and read-only status
 		skillPath := filepath.Join(m.skillsDir, skillDir)
 
-		// Check if this is from a git repo
+		// Check if this is from a git repo by checking if the path starts with a repo name
 		relPath, err := filepath.Rel(m.skillsDir, skillPath)
 		if err != nil {
 			continue
 		}
 		parts := strings.Split(relPath, string(filepath.Separator))
-		isFromGitRepo := len(parts) > 0 && parts[0] != skillDir
-
-		// If it's from a git repo, check if that repo is enabled
-		if isFromGitRepo {
+		
+		// Check if this skill is from a git repo (path has multiple parts and first part is a repo name)
+		if len(parts) > 1 {
 			repoName := parts[0]
 			repoEnabled := false
 			for _, enabledRepoName := range m.gitRepos {

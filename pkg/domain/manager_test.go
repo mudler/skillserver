@@ -196,4 +196,111 @@ Content here.`
 			Expect(err).To(HaveOccurred()) // Should fail because frontmatter is required
 		})
 	})
+
+	Context("Git Repository Filtering", func() {
+		It("should filter out skills from disabled git repos", func() {
+			// Create a git repo structure
+			repoDir := filepath.Join(tempDir, "enabled-repo")
+			err := os.MkdirAll(repoDir, 0755)
+			Expect(err).NotTo(HaveOccurred())
+
+			skillDir1 := filepath.Join(repoDir, "skill1")
+			err = os.MkdirAll(skillDir1, 0755)
+			Expect(err).NotTo(HaveOccurred())
+
+			skillMdContent1 := `---
+name: skill1
+description: Skill from enabled repo
+---
+# Skill 1
+`
+			err = os.WriteFile(filepath.Join(skillDir1, "SKILL.md"), []byte(skillMdContent1), 0644)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Create disabled repo
+			disabledRepoDir := filepath.Join(tempDir, "disabled-repo")
+			err = os.MkdirAll(disabledRepoDir, 0755)
+			Expect(err).NotTo(HaveOccurred())
+
+			skillDir2 := filepath.Join(disabledRepoDir, "skill2")
+			err = os.MkdirAll(skillDir2, 0755)
+			Expect(err).NotTo(HaveOccurred())
+
+			skillMdContent2 := `---
+name: skill2
+description: Skill from disabled repo
+---
+# Skill 2
+`
+			err = os.WriteFile(filepath.Join(skillDir2, "SKILL.md"), []byte(skillMdContent2), 0644)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Update manager's git repos list (instead of creating new manager to avoid RebuildIndex)
+			manager.UpdateGitRepos([]string{"enabled-repo"})
+
+			// List skills - should only include skill from enabled repo
+			skills, err := manager.ListSkills()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(skills).To(HaveLen(1))
+			Expect(skills[0].Name).To(Equal("enabled-repo/skill1"))
+		})
+
+		It("should update git repos list dynamically", func() {
+			// Create two repos
+			repo1Dir := filepath.Join(tempDir, "repo1")
+			err := os.MkdirAll(repo1Dir, 0755)
+			Expect(err).NotTo(HaveOccurred())
+
+			skillDir1 := filepath.Join(repo1Dir, "skill1")
+			err = os.MkdirAll(skillDir1, 0755)
+			Expect(err).NotTo(HaveOccurred())
+
+			skillMdContent1 := `---
+name: skill1
+description: Skill 1
+---
+# Skill 1
+`
+			err = os.WriteFile(filepath.Join(skillDir1, "SKILL.md"), []byte(skillMdContent1), 0644)
+			Expect(err).NotTo(HaveOccurred())
+
+			repo2Dir := filepath.Join(tempDir, "repo2")
+			err = os.MkdirAll(repo2Dir, 0755)
+			Expect(err).NotTo(HaveOccurred())
+
+			skillDir2 := filepath.Join(repo2Dir, "skill2")
+			err = os.MkdirAll(skillDir2, 0755)
+			Expect(err).NotTo(HaveOccurred())
+
+			skillMdContent2 := `---
+name: skill2
+description: Skill 2
+---
+# Skill 2
+`
+			err = os.WriteFile(filepath.Join(skillDir2, "SKILL.md"), []byte(skillMdContent2), 0644)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Update manager's git repos list (use existing manager to avoid RebuildIndex)
+			manager.UpdateGitRepos([]string{"repo1"})
+
+			skills, err := manager.ListSkills()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(skills).To(HaveLen(1))
+			Expect(skills[0].Name).To(Equal("repo1/skill1"))
+
+			// Update to include both repos
+			manager.UpdateGitRepos([]string{"repo1", "repo2"})
+			skills, err = manager.ListSkills()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(skills).To(HaveLen(2))
+
+			// Update to only repo2
+			manager.UpdateGitRepos([]string{"repo2"})
+			skills, err = manager.ListSkills()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(skills).To(HaveLen(1))
+			Expect(skills[0].Name).To(Equal("repo2/skill2"))
+		})
+	})
 })
