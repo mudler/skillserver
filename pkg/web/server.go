@@ -13,6 +13,7 @@ import (
 	"github.com/labstack/echo/v5/middleware"
 
 	"github.com/mudler/skillserver/pkg/domain"
+	"github.com/mudler/skillserver/pkg/git"
 )
 
 //go:embed ui
@@ -20,14 +21,17 @@ var uiFiles embed.FS
 
 // Server wraps the Echo server
 type Server struct {
-	echo         *echo.Echo
-	httpServer   *http.Server
-	skillManager domain.SkillManager
-	gitRepos     []string
+	echo          *echo.Echo
+	httpServer    *http.Server
+	skillManager  domain.SkillManager
+	fsManager     *domain.FileSystemManager
+	gitRepos      []string
+	gitSyncer     *git.GitSyncer
+	configManager *git.ConfigManager
 }
 
 // NewServer creates a new web server
-func NewServer(skillManager domain.SkillManager, gitRepos []string, enableLogging bool) *Server {
+func NewServer(skillManager domain.SkillManager, fsManager *domain.FileSystemManager, gitRepos []string, gitSyncer *git.GitSyncer, configManager *git.ConfigManager, enableLogging bool) *Server {
 	e := echo.New()
 
 	// Middleware
@@ -41,9 +45,12 @@ func NewServer(skillManager domain.SkillManager, gitRepos []string, enableLoggin
 	//e.Use(middleware.CORS())
 
 	server := &Server{
-		echo:         e,
-		skillManager: skillManager,
-		gitRepos:     gitRepos,
+		echo:          e,
+		skillManager:  skillManager,
+		fsManager:     fsManager,
+		gitRepos:      gitRepos,
+		gitSyncer:     gitSyncer,
+		configManager: configManager,
 	}
 
 	// API routes
@@ -55,12 +62,25 @@ func NewServer(skillManager domain.SkillManager, gitRepos []string, enableLoggin
 	api.DELETE("/skills/:name", server.deleteSkill)
 	api.GET("/skills/search", server.searchSkills)
 
+	// Import/Export routes
+	// Use wildcard for export to handle skill names with slashes (repoName/skillName)
+	// Register before other /skills routes to ensure it matches first
+	api.GET("/skills/export/*", server.exportSkill)
+	api.POST("/skills/import", server.importSkill)
+
 	// Resource management routes
 	api.GET("/skills/:name/resources", server.listSkillResources)
 	api.GET("/skills/:name/resources/*", server.getSkillResource)
 	api.POST("/skills/:name/resources", server.createSkillResource)
 	api.PUT("/skills/:name/resources/*", server.updateSkillResource)
 	api.DELETE("/skills/:name/resources/*", server.deleteSkillResource)
+
+	// Git repository management routes
+	api.GET("/git-repos", server.listGitRepos)
+	api.POST("/git-repos", server.addGitRepo)
+	api.PUT("/git-repos/:id", server.updateGitRepo)
+	api.DELETE("/git-repos/:id", server.deleteGitRepo)
+	api.POST("/git-repos/:id/sync", server.syncGitRepo)
 
 	// Serve UI
 	uiFS, err := fs.Sub(uiFiles, "ui")

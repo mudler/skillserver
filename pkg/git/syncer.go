@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-git/go-git/v5"
@@ -17,6 +18,7 @@ import (
 type GitSyncer struct {
 	skillsDir string
 	repos     []string
+	mu        sync.RWMutex // Mutex for thread-safe repo access
 	ctx       context.Context
 	cancel    context.CancelFunc
 	onUpdate  func() error // Callback to trigger re-indexing
@@ -66,9 +68,102 @@ func (g *GitSyncer) Stop() {
 	g.cancel()
 }
 
+// GetRepos returns a copy of the current repository list
+func (g *GitSyncer) GetRepos() []string {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	repos := make([]string, len(g.repos))
+	copy(repos, g.repos)
+	return repos
+}
+
+// AddRepo adds a new repository and syncs it
+func (g *GitSyncer) AddRepo(repoURL string) error {
+	g.mu.Lock()
+	// Check if repo already exists
+	for _, existing := range g.repos {
+		if existing == repoURL {
+			g.mu.Unlock()
+			return fmt.Errorf("repository already exists: %s", repoURL)
+		}
+	}
+	g.repos = append(g.repos, repoURL)
+	g.mu.Unlock()
+
+	// Sync the new repo
+	if err := g.syncRepo(repoURL); err != nil {
+		// Remove from list if sync failed
+		g.mu.Lock()
+		for i, r := range g.repos {
+			if r == repoURL {
+				g.repos = append(g.repos[:i], g.repos[i+1:]...)
+				break
+			}
+		}
+		g.mu.Unlock()
+		return fmt.Errorf("failed to sync new repository: %w", err)
+	}
+
+	// Trigger re-indexing
+	if g.onUpdate != nil {
+		if err := g.onUpdate(); err != nil {
+			return fmt.Errorf("failed to trigger re-indexing: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// RemoveRepo removes a repository from the list
+func (g *GitSyncer) RemoveRepo(repoURL string) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	found := false
+	for i, r := range g.repos {
+		if r == repoURL {
+			g.repos = append(g.repos[:i], g.repos[i+1:]...)
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return fmt.Errorf("repository not found: %s", repoURL)
+	}
+
+	return nil
+}
+
+// GetSkillsDir returns the skills directory path
+func (g *GitSyncer) GetSkillsDir() string {
+	return g.skillsDir
+}
+
+// UpdateRepos updates the repository list with new URLs
+func (g *GitSyncer) UpdateRepos(repos []string) error {
+	g.mu.Lock()
+	oldRepos := make([]string, len(g.repos))
+	copy(oldRepos, g.repos)
+	g.repos = repos
+	g.mu.Unlock()
+
+	// Sync all repos
+	if err := g.syncAll(); err != nil {
+		// Restore old repos on error
+		g.mu.Lock()
+		g.repos = oldRepos
+		g.mu.Unlock()
+		return err
+	}
+
+	return nil
+}
+
 // syncAll syncs all configured repositories
 func (g *GitSyncer) syncAll() error {
-	for _, repoURL := range g.repos {
+	repos := g.GetRepos()
+	for _, repoURL := range repos {
 		if err := g.syncRepo(repoURL); err != nil {
 			// Log error but continue with other repos (only if logger is set)
 			if g.logger != nil {
@@ -146,6 +241,35 @@ func (g *GitSyncer) pullRepo(repoDir string) error {
 			return fmt.Errorf("authentication required")
 		}
 		return fmt.Errorf("failed to pull: %w", err)
+	}
+
+	return nil
+}
+
+// SyncRepo manually syncs a specific repository by URL
+func (g *GitSyncer) SyncRepo(repoURL string) error {
+	// Check if repo is in the list
+	repos := g.GetRepos()
+	found := false
+	for _, r := range repos {
+		if r == repoURL {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("repository not configured: %s", repoURL)
+	}
+
+	if err := g.syncRepo(repoURL); err != nil {
+		return err
+	}
+
+	// Trigger re-indexing
+	if g.onUpdate != nil {
+		if err := g.onUpdate(); err != nil {
+			return fmt.Errorf("failed to trigger re-indexing: %w", err)
+		}
 	}
 
 	return nil

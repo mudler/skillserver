@@ -30,6 +30,12 @@
                     <i x-show="isDark" class="fas fa-sun text-yellow-500"></i>
                     <i x-show="!isDark" class="fas fa-moon text-gray-600 dark:text-gray-300"></i>
                 </button>
+                <button @click="showImportModal = true" class="btn btn-secondary">
+                    <i class="fas fa-upload mr-2"></i>Import Skill
+                </button>
+                <button @click="showGitReposModal = true; loadGitRepos()" class="btn btn-secondary">
+                    <i class="fas fa-code-branch mr-2"></i>Git Repos
+                </button>
                 <button @click="showEditor = true; editingSkill = null; skillContent = ''; skillName = ''; skillDescription = ''; skillLicense = ''; skillCompatibility = ''; nameValidationError = ''" class="btn btn-primary">
                     <i class="fas fa-plus mr-2"></i>New Skill
                 </button>
@@ -71,6 +77,9 @@
                     </div>
                     <p x-text="skill.description || 'No description'" class="skill-description text-gray-600 dark:text-gray-400"></p>
                     <div class="skill-actions">
+                        <button @click.stop="exportSkill(skill.name)" class="btn btn-small btn-secondary">
+                            <i class="fas fa-download mr-1"></i>Export
+                        </button>
                         <button x-show="!skill.readOnly" @click.stop="deleteSkill(skill.name)" class="btn btn-small btn-danger">
                             <i class="fas fa-trash mr-1"></i>Delete
                         </button>
@@ -182,7 +191,7 @@
                         x-model="skillLicense" 
                         placeholder="e.g., Apache-2.0"
                         :disabled="editingSkill && editingSkill.readOnly"
-                        class="skill-name-input full-width"
+                        class="skill-name-input full-width bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100"
                     >
                 </div>
                 <div class="form-group">
@@ -192,7 +201,7 @@
                         x-model="skillCompatibility" 
                         placeholder="e.g., Requires git, docker, jq"
                         :disabled="editingSkill && editingSkill.readOnly"
-                        class="skill-name-input full-width"
+                        class="skill-name-input full-width bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100"
                     >
                     <div class="flex justify-end items-center mt-1">
                         <span 
@@ -225,7 +234,7 @@
                             x-model="skillContent" 
                             placeholder="Enter markdown content here..."
                             :disabled="editingSkill && editingSkill.readOnly"
-                            class="editor-textarea"
+                            class="editor-textarea bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100"
                         ></textarea>
                     </div>
                     <div x-show="markdownPreview" class="editor-textarea bg-gray-50 dark:bg-gray-900 overflow-auto text-gray-900 dark:text-gray-100" x-html="renderMarkdown(skillContent)"></div>
@@ -342,7 +351,7 @@
         <div 
             x-show="confirmModal.show"
             @keydown.escape.window="confirmModal.show = false; if (confirmModal.callback) { confirmModal.callback(false); confirmModal.callback = null; }"
-            class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center"
+            class="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center"
             style="display: none;"
         >
             <div 
@@ -409,6 +418,193 @@
                         class="px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded hover:bg-blue-700 dark:hover:bg-blue-600 transition"
                     >
                         <i class="fas fa-save mr-2"></i>Save
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Import Skill Modal -->
+        <div 
+            x-show="showImportModal"
+            @keydown.escape.window="showImportModal = false"
+            class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+            style="display: none;"
+        >
+            <div 
+                @click.stop
+                class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md"
+            >
+                <div class="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                        <i class="fas fa-upload mr-2"></i>Import Skill
+                    </h3>
+                    <button 
+                        @click="showImportModal = false"
+                        class="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                    >
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="p-4">
+                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                        Upload a skill archive file (.tar.gz) to import a skill.
+                    </p>
+                    <input 
+                        type="file" 
+                        @change="handleImportFile($event)"
+                        accept=".tar.gz,.gz"
+                        class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        id="import-file-input"
+                    >
+                </div>
+                <div class="flex justify-end gap-3 p-4 border-t border-gray-200 dark:border-gray-700">
+                    <button 
+                        @click="showImportModal = false"
+                        class="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition"
+                    >
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Git Repositories Modal -->
+        <div 
+            x-show="showGitReposModal"
+            @keydown.escape.window="showGitReposModal = false"
+            class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+            style="display: none;"
+        >
+            <div 
+                @click.stop
+                class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col"
+            >
+                <div class="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                        <i class="fas fa-code-branch mr-2"></i>Git Repositories
+                    </h3>
+                    <button 
+                        @click="showGitReposModal = false"
+                        class="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                    >
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="flex-1 overflow-auto p-4">
+                    <!-- Add Repository Form -->
+                    <div class="mb-6 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+                        <h4 class="text-md font-semibold mb-3 text-gray-900 dark:text-gray-100">Add Repository</h4>
+                        <div class="flex gap-2">
+                            <input 
+                                type="text" 
+                                x-model="newGitRepoUrl"
+                                placeholder="https://github.com/user/repo.git"
+                                class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                                @keydown.enter="addGitRepo()"
+                            >
+                            <button 
+                                @click="addGitRepo()"
+                                class="btn btn-primary"
+                                :disabled="isLoading || !newGitRepoUrl"
+                            >
+                                <i x-show="!isLoading" class="fas fa-plus mr-2"></i>
+                                <i x-show="isLoading" class="fas fa-spinner fa-spin mr-2"></i>Add
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Repositories List -->
+                    <div class="space-y-2">
+                        <template x-for="repo in gitRepos" :key="repo.id">
+                            <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+                                <div class="flex-1 min-w-0">
+                                    <div class="font-medium text-gray-900 dark:text-gray-100" x-text="repo.name"></div>
+                                    <div class="text-sm text-gray-600 dark:text-gray-400 truncate" x-text="repo.url"></div>
+                                </div>
+                                <div class="flex gap-2 ml-4">
+                                    <button 
+                                        @click="syncGitRepo(repo.id)"
+                                        class="btn btn-small btn-secondary"
+                                        :disabled="isLoading"
+                                        title="Sync repository"
+                                    >
+                                        <i class="fas fa-sync"></i>
+                                    </button>
+                                    <button 
+                                        @click="editGitRepo(repo)"
+                                        class="btn btn-small btn-secondary"
+                                        :disabled="isLoading"
+                                        title="Edit repository"
+                                    >
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button 
+                                        @click="deleteGitRepo(repo.id)"
+                                        class="btn btn-small btn-danger"
+                                        :disabled="isLoading"
+                                        title="Delete repository"
+                                    >
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+                        <div x-show="gitRepos.length === 0" class="text-center py-8 text-gray-500 dark:text-gray-400">
+                            <i class="fas fa-code-branch text-4xl mb-2 text-gray-300 dark:text-gray-600"></i>
+                            <p>No git repositories configured</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit Git Repo Modal -->
+        <div 
+            x-show="showEditGitRepoModal"
+            @keydown.escape.window="showEditGitRepoModal = false"
+            class="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4"
+            style="display: none;"
+        >
+            <div 
+                @click.stop
+                class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md"
+            >
+                <div class="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                        <i class="fas fa-edit mr-2"></i>Edit Repository
+                    </h3>
+                    <button 
+                        @click="showEditGitRepoModal = false"
+                        class="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                    >
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="p-4">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium mb-2 text-gray-900 dark:text-gray-100">Repository URL</label>
+                        <input 
+                            type="text" 
+                            x-model="editingGitRepo.url"
+                            placeholder="https://github.com/user/repo.git"
+                            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        >
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 p-4 border-t border-gray-200 dark:border-gray-700">
+                    <button 
+                        @click="showEditGitRepoModal = false"
+                        class="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition"
+                    >
+                        Cancel
+                    </button>
+                    <button 
+                        @click="updateGitRepo()"
+                        class="px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded hover:bg-blue-700 dark:hover:bg-blue-600 transition"
+                        :disabled="isLoading"
+                    >
+                        <i x-show="!isLoading" class="fas fa-save mr-2"></i>
+                        <i x-show="isLoading" class="fas fa-spinner fa-spin mr-2"></i>Save
                     </button>
                 </div>
             </div>
@@ -486,6 +682,12 @@
                     message: '',
                     callback: null
                 },
+                showImportModal: false,
+                showGitReposModal: false,
+                showEditGitRepoModal: false,
+                gitRepos: [],
+                newGitRepoUrl: '',
+                editingGitRepo: { id: '', url: '' },
                 isDark: true,
 
                 initTheme() {
@@ -966,6 +1168,228 @@
                     } catch (error) {
                         console.error('Delete failed:', error);
                         this.showToast('Failed to delete skill', 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                async exportSkill(name) {
+                    this.isLoading = true;
+                    try {
+                        const response = await fetch(`/api/skills/export/${encodeURIComponent(name)}`);
+                        if (response.ok) {
+                            const blob = await response.blob();
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `${name}.tar.gz`;
+                            document.body.appendChild(a);
+                            a.click();
+                            window.URL.revokeObjectURL(url);
+                            document.body.removeChild(a);
+                            this.showToast('Skill exported successfully', 'success');
+                        } else {
+                            const error = await response.json();
+                            this.showToast('Failed to export: ' + (error.error || 'Unknown error'), 'error');
+                        }
+                    } catch (error) {
+                        console.error('Export failed:', error);
+                        this.showToast('Failed to export skill', 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                handleImportFile(event) {
+                    const file = event.target.files[0];
+                    if (!file) {
+                        return;
+                    }
+
+                    // Validate file type
+                    if (!file.name.endsWith('.tar.gz') && !file.name.endsWith('.gz')) {
+                        this.showToast('Please select a .tar.gz file', 'error');
+                        return;
+                    }
+
+                    this.importSkill(file);
+                    // Reset file input
+                    event.target.value = '';
+                },
+
+                async importSkill(file) {
+                    this.isLoading = true;
+                    this.showImportModal = false;
+
+                    const formData = new FormData();
+                    formData.append('file', file);
+
+                    try {
+                        const response = await fetch('/api/skills/import', {
+                            method: 'POST',
+                            body: formData,
+                        });
+
+                        if (response.ok) {
+                            const skill = await response.json();
+                            await this.loadSkills();
+                            this.showToast(`Skill "${skill.name}" imported successfully`, 'success');
+                            // Optionally open the imported skill for editing
+                            this.editSkill(skill);
+                        } else {
+                            const error = await response.json();
+                            this.showToast('Failed to import: ' + (error.error || 'Unknown error'), 'error');
+                        }
+                    } catch (error) {
+                        console.error('Import failed:', error);
+                        this.showToast('Failed to import skill', 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                async loadGitRepos() {
+                    try {
+                        const response = await fetch('/api/git-repos');
+                        if (response.ok) {
+                            this.gitRepos = await response.json();
+                        } else {
+                            console.error('Failed to load git repos');
+                        }
+                    } catch (error) {
+                        console.error('Failed to load git repos:', error);
+                    }
+                },
+
+                async addGitRepo() {
+                    if (!this.newGitRepoUrl.trim()) {
+                        this.showToast('Repository URL is required', 'error');
+                        return;
+                    }
+
+                    this.isLoading = true;
+                    try {
+                        const response = await fetch('/api/git-repos', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ url: this.newGitRepoUrl }),
+                        });
+
+                        if (response.ok) {
+                            await this.loadGitRepos();
+                            this.newGitRepoUrl = '';
+                            this.showToast('Repository added successfully', 'success');
+                            // Reload skills to show new repo's skills
+                            await this.loadSkills();
+                        } else {
+                            const error = await response.json();
+                            this.showToast('Failed to add repository: ' + (error.error || 'Unknown error'), 'error');
+                        }
+                    } catch (error) {
+                        console.error('Add repo failed:', error);
+                        this.showToast('Failed to add repository', 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                editGitRepo(repo) {
+                    this.editingGitRepo = {
+                        id: repo.id,
+                        url: repo.url
+                    };
+                    this.showEditGitRepoModal = true;
+                },
+
+                async updateGitRepo() {
+                    if (!this.editingGitRepo.url.trim()) {
+                        this.showToast('Repository URL is required', 'error');
+                        return;
+                    }
+
+                    this.isLoading = true;
+                    try {
+                        const response = await fetch(`/api/git-repos/${this.editingGitRepo.id}`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ 
+                                url: this.editingGitRepo.url,
+                                enabled: true
+                            }),
+                        });
+
+                        if (response.ok) {
+                            await this.loadGitRepos();
+                            this.showEditGitRepoModal = false;
+                            this.showToast('Repository updated successfully', 'success');
+                            // Reload skills
+                            await this.loadSkills();
+                        } else {
+                            const error = await response.json();
+                            this.showToast('Failed to update repository: ' + (error.error || 'Unknown error'), 'error');
+                        }
+                    } catch (error) {
+                        console.error('Update repo failed:', error);
+                        this.showToast('Failed to update repository', 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                async deleteGitRepo(id) {
+                    const repo = this.gitRepos.find(r => r.id === id);
+                    if (!repo) return;
+
+                    const confirmed = await this.showConfirm(`Are you sure you want to delete "${repo.name}"?`);
+                    if (!confirmed) {
+                        return;
+                    }
+
+                    this.isLoading = true;
+                    try {
+                        const response = await fetch(`/api/git-repos/${id}`, {
+                            method: 'DELETE',
+                        });
+
+                        if (response.ok) {
+                            await this.loadGitRepos();
+                            this.showToast('Repository deleted successfully', 'success');
+                            // Reload skills
+                            await this.loadSkills();
+                        } else {
+                            const error = await response.json();
+                            this.showToast('Failed to delete repository: ' + (error.error || 'Unknown error'), 'error');
+                        }
+                    } catch (error) {
+                        console.error('Delete repo failed:', error);
+                        this.showToast('Failed to delete repository', 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                async syncGitRepo(id) {
+                    this.isLoading = true;
+                    try {
+                        const response = await fetch(`/api/git-repos/${id}/sync`, {
+                            method: 'POST',
+                        });
+
+                        if (response.ok) {
+                            this.showToast('Repository synced successfully', 'success');
+                            // Reload skills
+                            await this.loadSkills();
+                        } else {
+                            const error = await response.json();
+                            this.showToast('Failed to sync repository: ' + (error.error || 'Unknown error'), 'error');
+                        }
+                    } catch (error) {
+                        console.error('Sync repo failed:', error);
+                        this.showToast('Failed to sync repository', 'error');
                     } finally {
                         this.isLoading = false;
                     }

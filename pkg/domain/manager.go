@@ -280,6 +280,11 @@ func (m *FileSystemManager) GetSkillsDir() string {
 	return m.skillsDir
 }
 
+// UpdateGitRepos updates the list of git repository names for read-only detection
+func (m *FileSystemManager) UpdateGitRepos(gitRepoNames []string) {
+	m.gitRepos = gitRepoNames
+}
+
 // getSkillPath returns the full path to a skill directory given its ID
 func (m *FileSystemManager) getSkillPath(skillID string) (string, error) {
 	// Check if this is a git repo skill (format: repoName/skillName)

@@ -106,19 +106,54 @@ func main() {
 	finalPort := *port
 	finalGitRepos := *gitReposFlag
 
-	// Parse git repos
+	// Initialize config manager
+	configManager := git.NewConfigManager(finalDir)
+
+	// Load git repos from config file or use command line/env repos
 	var gitRepos []string
-	if finalGitRepos != "" {
-		gitRepos = strings.Split(finalGitRepos, ",")
-		for i := range gitRepos {
-			gitRepos[i] = strings.TrimSpace(gitRepos[i])
+	configRepos, err := configManager.LoadConfig()
+	if err != nil && *enableLogging {
+		log.Printf("Warning: Failed to load git repo config: %v", err)
+	}
+
+	// If config file has repos, use them; otherwise use command line/env repos
+	if len(configRepos) > 0 {
+		for _, repo := range configRepos {
+			if repo.Enabled {
+				gitRepos = append(gitRepos, repo.URL)
+			}
+		}
+	} else {
+		// Parse git repos from command line/env
+		if finalGitRepos != "" {
+			parsedRepos := strings.Split(finalGitRepos, ",")
+			for i := range parsedRepos {
+				parsedRepos[i] = strings.TrimSpace(parsedRepos[i])
+			}
+			gitRepos = parsedRepos
+
+			// Save to config file if we have repos from command line/env
+			if len(gitRepos) > 0 {
+				configs := make([]git.GitRepoConfig, len(gitRepos))
+				for i, url := range gitRepos {
+					configs[i] = git.GitRepoConfig{
+						ID:      git.GenerateID(url),
+						URL:     url,
+						Name:    git.ExtractRepoName(url),
+						Enabled: true,
+					}
+				}
+				if err := configManager.SaveConfig(configs); err != nil && *enableLogging {
+					log.Printf("Warning: Failed to save git repo config: %v", err)
+				}
+			}
 		}
 	}
 
 	// Extract git repo names from URLs for read-only detection
 	var gitRepoNames []string
 	for _, repoURL := range gitRepos {
-		repoName := extractRepoName(repoURL)
+		repoName := git.ExtractRepoName(repoURL)
 		if repoName != "" {
 			gitRepoNames = append(gitRepoNames, repoName)
 		}
@@ -130,22 +165,23 @@ func main() {
 		log.Fatalf("Failed to initialize skill manager: %v", err)
 	}
 
+	// Get FileSystemManager reference for handlers
+	fsManager := skillManager
+
 	// Initialize Git syncer if repos are provided
 	var gitSyncer *git.GitSyncer
-	if len(gitRepos) > 0 {
-		gitSyncer = git.NewGitSyncer(finalDir, gitRepos, func() error {
-			return skillManager.RebuildIndex()
-		})
-		// Configure git syncer output based on logging flag
-		if *enableLogging {
-			gitSyncer.SetProgressWriter(os.Stderr) // Use stderr for git progress
-			gitSyncer.SetLogger(os.Stderr)         // Use stderr for log messages
-		}
-		if err := gitSyncer.Start(); err != nil {
-			log.Printf("Warning: Failed to start Git syncer: %v", err)
-		} else if *enableLogging {
-			log.Println("Git syncer started")
-		}
+	gitSyncer = git.NewGitSyncer(finalDir, gitRepos, func() error {
+		return skillManager.RebuildIndex()
+	})
+	// Configure git syncer output based on logging flag
+	if *enableLogging {
+		gitSyncer.SetProgressWriter(os.Stderr) // Use stderr for git progress
+		gitSyncer.SetLogger(os.Stderr)         // Use stderr for log messages
+	}
+	if err := gitSyncer.Start(); err != nil {
+		log.Printf("Warning: Failed to start Git syncer: %v", err)
+	} else if *enableLogging {
+		log.Println("Git syncer started")
 	}
 
 	// Create context for graceful shutdown
@@ -157,7 +193,7 @@ func main() {
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
 	// Start web server in a goroutine (non-blocking)
-	webServer := web.NewServer(skillManager, gitRepos, *enableLogging)
+	webServer := web.NewServer(skillManager, fsManager, gitRepos, gitSyncer, configManager, *enableLogging)
 	go func() {
 		addr := fmt.Sprintf(":%s", finalPort)
 		if *enableLogging {

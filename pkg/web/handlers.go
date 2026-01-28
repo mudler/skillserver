@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"github.com/mudler/skillserver/pkg/domain"
+	"github.com/mudler/skillserver/pkg/git"
 )
 
 // SkillResponse represents a skill in API responses
@@ -789,6 +791,461 @@ func (s *Server) deleteSkillResource(c *echo.Context) error {
 	}
 
 	return c.NoContent(http.StatusNoContent)
+}
+
+// exportSkill exports a skill as a compressed archive
+func (s *Server) exportSkill(c *echo.Context) error {
+	// Get skill name from wildcard path (handles names with slashes like "repoName/skillName")
+	// The route is /skills/export/*, so * captures the skill name
+	name := c.Param("*")
+	// Remove leading slash if present
+	name = strings.TrimPrefix(name, "/")
+	// URL decode the name (Echo should do this automatically, but be explicit)
+	if decoded, err := url.PathUnescape(name); err == nil {
+		name = decoded
+	}
+
+	// Check if skill exists
+	skill, err := s.skillManager.ReadSkill(name)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{
+			"error": "skill not found",
+		})
+	}
+
+	// Get the skills directory from the manager
+	fsManager, ok := s.skillManager.(*domain.FileSystemManager)
+	if !ok {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "unsupported manager type",
+		})
+	}
+
+	// Create archive
+	archiveData, err := domain.ExportSkill(skill.ID, fsManager.GetSkillsDir())
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": fmt.Sprintf("failed to create archive: %v", err),
+		})
+	}
+
+	// Set headers for file download
+	c.Response().Header().Set("Content-Type", "application/gzip")
+	c.Response().Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.tar.gz\"", name))
+	c.Response().Header().Set("Content-Length", fmt.Sprintf("%d", len(archiveData)))
+
+	return c.Blob(http.StatusOK, "application/gzip", archiveData)
+}
+
+// importSkill imports a skill from a compressed archive
+func (s *Server) importSkill(c *echo.Context) error {
+	// Get uploaded file
+	file, err := c.FormFile("file")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "file is required",
+		})
+	}
+
+	// Open file
+	src, err := file.Open()
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "failed to open uploaded file",
+		})
+	}
+	defer src.Close()
+
+	// Read file content
+	const maxArchiveSize = 50 * 1024 * 1024 // 50MB limit
+	archiveData := make([]byte, file.Size)
+	if file.Size > maxArchiveSize {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": fmt.Sprintf("archive too large (max %d bytes)", maxArchiveSize),
+		})
+	}
+
+	n, err := io.ReadFull(src, archiveData)
+	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "failed to read uploaded file",
+		})
+	}
+	archiveData = archiveData[:n]
+
+	// Get the skills directory from the manager
+	fsManager, ok := s.skillManager.(*domain.FileSystemManager)
+	if !ok {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "unsupported manager type",
+		})
+	}
+
+	// Import skill
+	skillName, err := domain.ImportSkill(archiveData, fsManager.GetSkillsDir())
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": err.Error(),
+		})
+	}
+
+	// Rebuild index
+	if err := s.skillManager.RebuildIndex(); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "failed to rebuild index",
+		})
+	}
+
+	// Read the imported skill
+	skill, err := s.skillManager.ReadSkill(skillName)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "failed to read imported skill",
+		})
+	}
+
+	response := SkillResponse{
+		Name:     skill.Name,
+		Content:  skill.Content,
+		ReadOnly: skill.ReadOnly,
+	}
+	if skill.Metadata != nil {
+		response.Description = skill.Metadata.Description
+		response.License = skill.Metadata.License
+		response.Compatibility = skill.Metadata.Compatibility
+		response.Metadata = skill.Metadata.Metadata
+		response.AllowedTools = skill.Metadata.AllowedTools
+	}
+
+	return c.JSON(http.StatusCreated, response)
+}
+
+// Git repository management handlers
+
+// GitRepoResponse represents a git repository in API responses
+type GitRepoResponse struct {
+	ID      string `json:"id"`
+	URL     string `json:"url"`
+	Name    string `json:"name"`
+	Enabled bool   `json:"enabled"`
+}
+
+// AddGitRepoRequest represents a request to add a git repository
+type AddGitRepoRequest struct {
+	URL string `json:"url"`
+}
+
+// UpdateGitRepoRequest represents a request to update a git repository
+type UpdateGitRepoRequest struct {
+	URL     string `json:"url"`
+	Enabled bool   `json:"enabled"`
+}
+
+// listGitRepos lists all configured git repositories
+func (s *Server) listGitRepos(c *echo.Context) error {
+	if s.gitSyncer == nil {
+		return c.JSON(http.StatusOK, []GitRepoResponse{})
+	}
+
+	// Get repos from syncer
+	repoURLs := s.gitSyncer.GetRepos()
+
+	// Convert to response format
+	repos := make([]GitRepoResponse, len(repoURLs))
+	for i, url := range repoURLs {
+		repos[i] = GitRepoResponse{
+			ID:      git.GenerateID(url),
+			URL:     url,
+			Name:    git.ExtractRepoName(url),
+			Enabled: true, // All repos in syncer are enabled
+		}
+	}
+
+	return c.JSON(http.StatusOK, repos)
+}
+
+// addGitRepo adds a new git repository
+func (s *Server) addGitRepo(c *echo.Context) error {
+	if s.gitSyncer == nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "git syncer not available",
+		})
+	}
+
+	var req AddGitRepoRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "invalid request",
+		})
+	}
+
+	if req.URL == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "URL is required",
+		})
+	}
+
+	// Validate URL format (basic check)
+	if !strings.HasPrefix(req.URL, "http://") && !strings.HasPrefix(req.URL, "https://") && !strings.HasPrefix(req.URL, "git@") {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "invalid URL format",
+		})
+	}
+
+	// Add repo to syncer
+	if err := s.gitSyncer.AddRepo(req.URL); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": err.Error(),
+		})
+	}
+
+	// Update FileSystemManager's git repos list for read-only detection
+	if s.fsManager != nil {
+		repos := s.gitSyncer.GetRepos()
+		gitRepoNames := make([]string, len(repos))
+		for i, url := range repos {
+			gitRepoNames[i] = git.ExtractRepoName(url)
+		}
+		s.fsManager.UpdateGitRepos(gitRepoNames)
+	}
+
+	// Save config
+	if s.configManager != nil {
+		repos := s.gitSyncer.GetRepos()
+		configs := make([]git.GitRepoConfig, len(repos))
+		for i, url := range repos {
+			configs[i] = git.GitRepoConfig{
+				ID:      git.GenerateID(url),
+				URL:     url,
+				Name:    git.ExtractRepoName(url),
+				Enabled: true,
+			}
+		}
+		if err := s.configManager.SaveConfig(configs); err != nil {
+			// Log error but don't fail the request
+			fmt.Printf("Warning: failed to save config: %v\n", err)
+		}
+	}
+
+	response := GitRepoResponse{
+		ID:      git.GenerateID(req.URL),
+		URL:     req.URL,
+		Name:    git.ExtractRepoName(req.URL),
+		Enabled: true,
+	}
+
+	return c.JSON(http.StatusCreated, response)
+}
+
+// updateGitRepo updates a git repository
+func (s *Server) updateGitRepo(c *echo.Context) error {
+	if s.gitSyncer == nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "git syncer not available",
+		})
+	}
+
+	id := c.Param("id")
+
+	var req UpdateGitRepoRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "invalid request",
+		})
+	}
+
+	// Find repo by ID
+	repos := s.gitSyncer.GetRepos()
+	var foundURL string
+	for _, url := range repos {
+		if git.GenerateID(url) == id {
+			foundURL = url
+			break
+		}
+	}
+
+	if foundURL == "" {
+		return c.JSON(http.StatusNotFound, map[string]string{
+			"error": "repository not found",
+		})
+	}
+
+	// If URL changed, remove old and add new
+	if req.URL != "" && req.URL != foundURL {
+		if err := s.gitSyncer.RemoveRepo(foundURL); err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"error": err.Error(),
+			})
+		}
+		if err := s.gitSyncer.AddRepo(req.URL); err != nil {
+			// Try to restore old repo on error
+			s.gitSyncer.AddRepo(foundURL)
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": err.Error(),
+			})
+		}
+		foundURL = req.URL
+	}
+
+	// Update FileSystemManager's git repos list for read-only detection
+	if s.fsManager != nil {
+		repos := s.gitSyncer.GetRepos()
+		gitRepoNames := make([]string, len(repos))
+		for i, url := range repos {
+			gitRepoNames[i] = git.ExtractRepoName(url)
+		}
+		s.fsManager.UpdateGitRepos(gitRepoNames)
+	}
+
+	// Save config
+	if s.configManager != nil {
+		repos := s.gitSyncer.GetRepos()
+		configs := make([]git.GitRepoConfig, len(repos))
+		for i, url := range repos {
+			configs[i] = git.GitRepoConfig{
+				ID:      git.GenerateID(url),
+				URL:     url,
+				Name:    git.ExtractRepoName(url),
+				Enabled: true,
+			}
+		}
+		if err := s.configManager.SaveConfig(configs); err != nil {
+			fmt.Printf("Warning: failed to save config: %v\n", err)
+		}
+	}
+
+	response := GitRepoResponse{
+		ID:      git.GenerateID(foundURL),
+		URL:     foundURL,
+		Name:    git.ExtractRepoName(foundURL),
+		Enabled: req.Enabled,
+	}
+
+	return c.JSON(http.StatusOK, response)
+}
+
+// deleteGitRepo deletes a git repository
+func (s *Server) deleteGitRepo(c *echo.Context) error {
+	if s.gitSyncer == nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "git syncer not available",
+		})
+	}
+
+	id := c.Param("id")
+
+	// Find repo by ID
+	repos := s.gitSyncer.GetRepos()
+	var foundURL string
+	for _, url := range repos {
+		if git.GenerateID(url) == id {
+			foundURL = url
+			break
+		}
+	}
+
+	if foundURL == "" {
+		return c.JSON(http.StatusNotFound, map[string]string{
+			"error": "repository not found",
+		})
+	}
+
+	// Get repo name to delete the directory
+	repoName := git.ExtractRepoName(foundURL)
+
+	// Remove repo from syncer
+	if err := s.gitSyncer.RemoveRepo(foundURL); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": err.Error(),
+		})
+	}
+
+	// Delete the repository directory and all its contents
+	skillsDir := s.gitSyncer.GetSkillsDir()
+	repoDir := filepath.Join(skillsDir, repoName)
+	if err := os.RemoveAll(repoDir); err != nil {
+		// Log error but don't fail the request - repo is already removed from config
+		fmt.Printf("Warning: failed to delete repository directory %s: %v\n", repoDir, err)
+	}
+
+	// Update FileSystemManager's git repos list for read-only detection
+	if s.fsManager != nil {
+		repos := s.gitSyncer.GetRepos()
+		gitRepoNames := make([]string, len(repos))
+		for i, url := range repos {
+			gitRepoNames[i] = git.ExtractRepoName(url)
+		}
+		s.fsManager.UpdateGitRepos(gitRepoNames)
+	}
+
+	// Save config
+	if s.configManager != nil {
+		repos := s.gitSyncer.GetRepos()
+		configs := make([]git.GitRepoConfig, len(repos))
+		for i, url := range repos {
+			configs[i] = git.GitRepoConfig{
+				ID:      git.GenerateID(url),
+				URL:     url,
+				Name:    git.ExtractRepoName(url),
+				Enabled: true,
+			}
+		}
+		if err := s.configManager.SaveConfig(configs); err != nil {
+			fmt.Printf("Warning: failed to save config: %v\n", err)
+		}
+	}
+
+	// Trigger re-indexing
+	if err := s.skillManager.RebuildIndex(); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "failed to rebuild index",
+		})
+	}
+
+	return c.NoContent(http.StatusNoContent)
+}
+
+// syncGitRepo manually syncs a git repository
+func (s *Server) syncGitRepo(c *echo.Context) error {
+	if s.gitSyncer == nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "git syncer not available",
+		})
+	}
+
+	id := c.Param("id")
+
+	// Find repo by ID
+	repos := s.gitSyncer.GetRepos()
+	var foundURL string
+	for _, url := range repos {
+		if git.GenerateID(url) == id {
+			foundURL = url
+			break
+		}
+	}
+
+	if foundURL == "" {
+		return c.JSON(http.StatusNotFound, map[string]string{
+			"error": "repository not found",
+		})
+	}
+
+	// Sync the repo
+	if err := s.gitSyncer.SyncRepo(foundURL); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": err.Error(),
+		})
+	}
+
+	response := GitRepoResponse{
+		ID:      git.GenerateID(foundURL),
+		URL:     foundURL,
+		Name:    git.ExtractRepoName(foundURL),
+		Enabled: true,
+	}
+
+	return c.JSON(http.StatusOK, response)
 }
 
 // Helper functions
