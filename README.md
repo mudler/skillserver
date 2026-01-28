@@ -13,6 +13,8 @@ An MCP/REST server with WebUI serving as a centralized skills database for AI Ag
 - **Resource Management**: Support for scripts, references, and assets directories per skill
 - **Agent Skills Spec Compliant**: Full support for the Agent Skills specification format
 
+<img width="580" alt="Screenshot 2026-01-28 at 11-08-16 skillserver" src="https://github.com/user-attachments/assets/c8db8890-b888-4354-8e7e-0d2a8c37af04" />
+
 ## Installation
 
 ### From Source
