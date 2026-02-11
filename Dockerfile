@@ -34,4 +34,3 @@ EXPOSE 8080
 
 # Run the application
 ENTRYPOINT ["./skillserver"]
-CMD ["--dir", "/app/skills", "--port", "8080"]
