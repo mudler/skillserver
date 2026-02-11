@@ -91,6 +91,10 @@ export SKILLSERVER_GIT_REPOS="https://github.com/user/repo1.git,https://github.c
 ./skillserver --git-repos "https://github.com/user/repo1.git,https://github.com/user/repo2.git"
 ```
 
+Note: there is no specific layout that the repository needs to follow. The only requirements is that in every skill you have a `SKILL.md` file, and that gets scanned automatically.
+
+See [here](https://github.com/anthropics/skills) for an example repository.
+
 ### Docker Usage
 
 ```bash
