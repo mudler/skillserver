@@ -98,5 +98,10 @@ func NewServer(skillManager domain.SkillManager) *Server {
 
 // Run starts the MCP server with stdio transport
 func (s *Server) Run(ctx context.Context) error {
-	return s.mcpServer.Run(ctx, &mcp.StdioTransport{})
+	return s.RunWithTransport(ctx, &mcp.StdioTransport{})
+}
+
+// RunWithTransport starts the MCP server with the given transport (e.g. in-memory for in-process embedding).
+func (s *Server) RunWithTransport(ctx context.Context, transport mcp.Transport) error {
+	return s.mcpServer.Run(ctx, transport)
 }
