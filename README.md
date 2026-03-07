@@ -99,9 +99,9 @@ See [here](https://github.com/anthropics/skills) for an example repository.
 
 ```bash
 # Using environment variables
-docker run -p 8080:8080 \
+docker run -p 8034:8034 \
   -e SKILLSERVER_DIR=/app/skills \
-  -e SKILLSERVER_PORT=8080 \
+  -e SKILLSERVER_PORT=8034 \
   -e SKILLSERVER_GIT_REPOS="https://github.com/user/repo.git" \
   -v $(pwd)/skills:/app/skills \
   ghcr.io/mudler/skillserver:latest
