@@ -72,6 +72,15 @@ func (m *FileSystemManager) isGitRepoPath(path string) bool {
 	return false
 }
 
+// isKnownRepoDir checks if a directory name corresponds to a cloned git repo
+// (i.e., has a .git subdirectory) but is not in the enabled repos list.
+// This prevents disabled repo root-level skills from appearing as local skills.
+func (m *FileSystemManager) isKnownRepoDir(dirName string) bool {
+	gitDir := filepath.Join(m.skillsDir, dirName, ".git")
+	info, err := os.Stat(gitDir)
+	return err == nil && info.IsDir()
+}
+
 // findSkillDirs recursively finds all directories containing SKILL.md files
 func (m *FileSystemManager) findSkillDirs(root string, basePath string) ([]string, error) {
 	var skillDirs []string
@@ -127,20 +136,22 @@ func (m *FileSystemManager) ListSkills() ([]Skill, error) {
 		}
 		parts := strings.Split(relPath, string(filepath.Separator))
 		
-		// Check if this skill is from a git repo (path has multiple parts and first part is a repo name)
-		if len(parts) > 1 {
-			repoName := parts[0]
-			repoEnabled := false
-			for _, enabledRepoName := range m.gitRepos {
-				if enabledRepoName == repoName {
-					repoEnabled = true
-					break
-				}
+		// Check if this skill is from a git repo (first part of path matches a repo name)
+		repoName := parts[0]
+		isFromRepo := false
+		for _, enabledRepoName := range m.gitRepos {
+			if enabledRepoName == repoName {
+				isFromRepo = true
+				break
 			}
-			// Skip skills from disabled repos
-			if !repoEnabled {
-				continue
-			}
+		}
+		// For paths within repo directories (both root-level and nested), skip if repo is disabled
+		if len(parts) > 1 && !isFromRepo {
+			continue
+		}
+		// For single-part paths, skip if it matches a known (but disabled) repo directory
+		if len(parts) == 1 && !isFromRepo && m.isKnownRepoDir(repoName) {
+			continue
 		}
 
 		isReadOnly := m.isGitRepoPath(skillPath)
@@ -256,7 +267,7 @@ func (m *FileSystemManager) ReadSkill(name string) (*Skill, error) {
 		}
 	}
 
-	// Local skill - look for directory with this name
+	// Local skill or root-level repo skill - look for directory with this name
 	skillPath := filepath.Join(m.skillsDir, name)
 	skillMdPath := filepath.Join(skillPath, "SKILL.md")
 
@@ -264,7 +275,8 @@ func (m *FileSystemManager) ReadSkill(name string) (*Skill, error) {
 		return nil, fmt.Errorf("skill not found: %s", name)
 	}
 
-	return m.readSkillFromPath(skillPath, name, false)
+	isReadOnly := m.isGitRepoPath(skillPath)
+	return m.readSkillFromPath(skillPath, name, isReadOnly)
 }
 
 // SearchSkills searches for skills matching the query

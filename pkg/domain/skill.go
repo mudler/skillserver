@@ -101,9 +101,28 @@ func ParseFrontmatter(content string) (*SkillMetadata, string, error) {
 	frontmatter := content[3 : endIdx+3]
 	remaining := strings.TrimSpace(content[endIdx+6:])
 
+	// First try strict parsing into SkillMetadata
 	var metadata SkillMetadata
 	if err := yaml.Unmarshal([]byte(frontmatter), &metadata); err != nil {
-		return nil, content, fmt.Errorf("failed to parse frontmatter: %w", err)
+		// If strict parsing fails, try a lenient approach:
+		// parse only the known fields we need (name, description) from a generic map
+		var raw map[string]interface{}
+		if yamlErr := yaml.Unmarshal([]byte(frontmatter), &raw); yamlErr != nil {
+			return nil, content, fmt.Errorf("failed to parse frontmatter: %w", yamlErr)
+		}
+		if name, ok := raw["name"].(string); ok {
+			metadata.Name = name
+		}
+		if desc, ok := raw["description"].(string); ok {
+			metadata.Description = desc
+		}
+		if license, ok := raw["license"].(string); ok {
+			metadata.License = license
+		}
+		if compat, ok := raw["compatibility"].(string); ok {
+			metadata.Compatibility = compat
+		}
+		// allowed-tools handled best-effort: skip if format is unrecognized
 	}
 
 	// Validate required fields
@@ -115,12 +134,6 @@ func ParseFrontmatter(content string) (*SkillMetadata, string, error) {
 	}
 	if metadata.Description == "" {
 		return nil, content, fmt.Errorf("frontmatter 'description' field is required")
-	}
-	if len(metadata.Description) > 1024 {
-		return nil, content, fmt.Errorf("description must be 1-1024 characters, got %d", len(metadata.Description))
-	}
-	if metadata.Compatibility != "" && len(metadata.Compatibility) > 500 {
-		return nil, content, fmt.Errorf("compatibility must be max 500 characters, got %d", len(metadata.Compatibility))
 	}
 
 	return &metadata, remaining, nil
