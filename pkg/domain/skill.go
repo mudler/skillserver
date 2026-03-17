@@ -8,14 +8,45 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// FlexibleStringList is a type that can unmarshal from either a YAML string
+// (space-delimited) or a YAML list of strings, storing the result as a
+// space-delimited string for backward compatibility.
+type FlexibleStringList string
+
+func (f FlexibleStringList) String() string {
+	return string(f)
+}
+
+// UnmarshalYAML implements custom YAML unmarshaling for FlexibleStringList
+func (f *FlexibleStringList) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.ScalarNode:
+		// Plain string: "Bash Read Write"
+		*f = FlexibleStringList(value.Value)
+		return nil
+	case yaml.SequenceNode:
+		// List: ["Bash", "Read", "Write"]
+		var items []string
+		for _, item := range value.Content {
+			if item.Kind == yaml.ScalarNode {
+				items = append(items, item.Value)
+			}
+		}
+		*f = FlexibleStringList(strings.Join(items, " "))
+		return nil
+	default:
+		return fmt.Errorf("allowed-tools must be a string or list of strings")
+	}
+}
+
 // SkillMetadata represents YAML frontmatter metadata per Agent Skills specification
 type SkillMetadata struct {
-	Name          string            `yaml:"name"`        // Required, 1-64 chars, lowercase alphanumeric + hyphens
-	Description   string            `yaml:"description"` // Required, 1-1024 chars
-	License       string            `yaml:"license,omitempty"`
-	Compatibility string            `yaml:"compatibility,omitempty"` // Max 500 chars
-	Metadata      map[string]string `yaml:"metadata,omitempty"`
-	AllowedTools  string            `yaml:"allowed-tools,omitempty"` // Space-delimited
+	Name          string             `yaml:"name"`        // Required, 1-64 chars, lowercase alphanumeric + hyphens
+	Description   string             `yaml:"description"` // Required
+	License       string             `yaml:"license,omitempty"`
+	Compatibility string             `yaml:"compatibility,omitempty"` // Max 500 chars
+	Metadata      map[string]string  `yaml:"metadata,omitempty"`
+	AllowedTools  FlexibleStringList `yaml:"allowed-tools,omitempty"` // Space-delimited string or YAML list
 }
 
 // Skill represents a skill directory with SKILL.md file

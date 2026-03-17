@@ -70,7 +70,7 @@ func (s *Server) listSkills(c *echo.Context) error {
 			responses[i].License = skill.Metadata.License
 			responses[i].Compatibility = skill.Metadata.Compatibility
 			responses[i].Metadata = skill.Metadata.Metadata
-			responses[i].AllowedTools = skill.Metadata.AllowedTools
+			responses[i].AllowedTools = skill.Metadata.AllowedTools.String()
 		}
 	}
 
@@ -97,7 +97,7 @@ func (s *Server) getSkill(c *echo.Context) error {
 		response.License = skill.Metadata.License
 		response.Compatibility = skill.Metadata.Compatibility
 		response.Metadata = skill.Metadata.Metadata
-		response.AllowedTools = skill.Metadata.AllowedTools
+		response.AllowedTools = skill.Metadata.AllowedTools.String()
 	}
 
 	return c.JSON(http.StatusOK, response)
@@ -215,7 +215,7 @@ func (s *Server) createSkill(c *echo.Context) error {
 		response.License = skill.Metadata.License
 		response.Compatibility = skill.Metadata.Compatibility
 		response.Metadata = skill.Metadata.Metadata
-		response.AllowedTools = skill.Metadata.AllowedTools
+		response.AllowedTools = skill.Metadata.AllowedTools.String()
 	}
 
 	return c.JSON(http.StatusCreated, response)
@@ -325,7 +325,7 @@ func (s *Server) updateSkill(c *echo.Context) error {
 		response.License = skill.Metadata.License
 		response.Compatibility = skill.Metadata.Compatibility
 		response.Metadata = skill.Metadata.Metadata
-		response.AllowedTools = skill.Metadata.AllowedTools
+		response.AllowedTools = skill.Metadata.AllowedTools.String()
 	}
 
 	return c.JSON(http.StatusOK, response)
@@ -403,7 +403,7 @@ func (s *Server) searchSkills(c *echo.Context) error {
 			responses[i].License = skill.Metadata.License
 			responses[i].Compatibility = skill.Metadata.Compatibility
 			responses[i].Metadata = skill.Metadata.Metadata
-			responses[i].AllowedTools = skill.Metadata.AllowedTools
+			responses[i].AllowedTools = skill.Metadata.AllowedTools.String()
 		}
 	}
 
@@ -914,7 +914,7 @@ func (s *Server) importSkill(c *echo.Context) error {
 		response.License = skill.Metadata.License
 		response.Compatibility = skill.Metadata.Compatibility
 		response.Metadata = skill.Metadata.Metadata
-		response.AllowedTools = skill.Metadata.AllowedTools
+		response.AllowedTools = skill.Metadata.AllowedTools.String()
 	}
 
 	return c.JSON(http.StatusCreated, response)
