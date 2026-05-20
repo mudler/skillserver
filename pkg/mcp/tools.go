@@ -66,8 +66,8 @@ func listSkills(ctx context.Context, req *mcp.CallToolRequest, input ListSkillsI
 	skillInfos := make([]SkillInfo, len(skills))
 	for i, skill := range skills {
 		skillInfos[i] = SkillInfo{
-			ID: skill.ID,
-			//	Name: skill.Name,
+			ID:   skill.ID,
+			Name: skill.Name,
 		}
 		if skill.Metadata != nil {
 			skillInfos[i].Description = skill.Metadata.Description
