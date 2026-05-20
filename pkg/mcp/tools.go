@@ -19,8 +19,7 @@ type ListSkillsOutput struct {
 
 // SkillInfo represents basic information about a skill
 type SkillInfo struct {
-	ID          string `json:"id"`   // Unique identifier to use when reading the skill (repoName/skillName or skillName)
-	Name        string `json:"name"` // Display name
+	ID          string `json:"id"` // Unique identifier to use when reading the skill (repoName/skillName or skillName)
 	Description string `json:"description,omitempty"`
 }
 
@@ -46,8 +45,7 @@ type SearchSkillsOutput struct {
 
 // SearchResult represents a search result
 type SearchResult struct {
-	ID      string `json:"id"`   // Unique identifier to use when reading the skill (repoName/skillName or skillName)
-	Name    string `json:"name"` // Display name
+	ID      string `json:"id"` // Unique identifier to use when reading the skill (repoName/skillName or skillName)
 	Content string `json:"content"`
 	Snippet string `json:"snippet,omitempty"`
 }
@@ -66,8 +64,7 @@ func listSkills(ctx context.Context, req *mcp.CallToolRequest, input ListSkillsI
 	skillInfos := make([]SkillInfo, len(skills))
 	for i, skill := range skills {
 		skillInfos[i] = SkillInfo{
-			ID:   skill.ID,
-			Name: skill.Name,
+			ID: skill.ID,
 		}
 		if skill.Metadata != nil {
 			skillInfos[i].Description = skill.Metadata.Description
@@ -112,7 +109,6 @@ func searchSkills(ctx context.Context, req *mcp.CallToolRequest, input SearchSki
 
 		results[i] = SearchResult{
 			ID:      skill.ID,
-			Name:    skill.Name,
 			Content: skill.Content,
 			Snippet: snippet,
 		}
