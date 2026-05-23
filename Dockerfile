@@ -1,5 +1,8 @@
 # Build stage
-FROM golang:1.25-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
+
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
 
 WORKDIR /build
 
@@ -13,8 +16,8 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the binary
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o skillserver ./cmd/skillserver
+# Build the binary for the target platform
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -a -installsuffix cgo -o skillserver ./cmd/skillserver
 
 # Runtime stage
 FROM alpine:latest
