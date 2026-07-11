@@ -4,12 +4,19 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/blevesearch/bleve/v2"
 )
 
 // Searcher handles full-text search using bleve
 type Searcher struct {
+	// mu guards index (and its indexPath backing files) so a concurrent
+	// IndexSkills rebuild cannot Close an index another goroutine is
+	// closing/searching. Without it, two overlapping RebuildIndex calls
+	// (one GitSyncer goroutine per repo) double-close the underlying bleve
+	// index and panic with "close of closed channel", taking the process down.
+	mu        sync.RWMutex
 	indexPath string
 	index     bleve.Index
 }
@@ -37,6 +44,9 @@ func NewSearcher(skillsDir string) (*Searcher, error) {
 
 // IndexSkills indexes a list of skills
 func (s *Searcher) IndexSkills(skills []Skill) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	// Clear existing index by deleting and recreating
 	s.index.Close()
 	os.RemoveAll(s.indexPath)
@@ -76,6 +86,11 @@ func (s *Searcher) IndexSkills(skills []Skill) error {
 
 // Search performs a full-text search and returns matching skills
 func (s *Searcher) Search(query string) ([]Skill, error) {
+	// RLock held for the whole search so an in-flight IndexSkills cannot
+	// Close the index out from under s.index.Search below.
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	if s.index == nil {
 		return []Skill{}, nil
 	}
@@ -120,6 +135,9 @@ func (s *Searcher) Search(query string) ([]Skill, error) {
 
 // Close closes the search index
 func (s *Searcher) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if s.index != nil {
 		return s.index.Close()
 	}
