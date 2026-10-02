@@ -26,10 +26,27 @@ type FileSystemManager struct {
 	skillsDir string
 	searcher  *Searcher
 	gitRepos  []string // List of git repo directory names (for read-only detection)
+	// excludePatterns hides skills whose name matches one of these glob
+	// patterns from listing, search, reading and resource access. The files
+	// on disk are left untouched, so git pulls keep working.
+	excludePatterns []string
 }
 
-// NewFileSystemManager creates a new FileSystemManager
-func NewFileSystemManager(skillsDir string, gitRepos []string) (*FileSystemManager, error) {
+// NewFileSystemManager creates a new FileSystemManager.
+//
+// Without options, skills listed in the SKILLSERVER_EXCLUDE_SKILLS
+// environment variable are excluded (see ExcludedSkillsFromEnv), so programs
+// embedding the manager honour the setting without extra wiring. Passing
+// WithExcludedSkills overrides the environment variable.
+func NewFileSystemManager(skillsDir string, gitRepos []string, opts ...Option) (*FileSystemManager, error) {
+	cfg := managerConfig{excludePatterns: ExcludedSkillsFromEnv()}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	if err := validateExcludePatterns(cfg.excludePatterns); err != nil {
+		return nil, err
+	}
+
 	if err := os.MkdirAll(skillsDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create skills directory: %w", err)
 	}
@@ -40,9 +57,10 @@ func NewFileSystemManager(skillsDir string, gitRepos []string) (*FileSystemManag
 	}
 
 	manager := &FileSystemManager{
-		skillsDir: skillsDir,
-		searcher:  searcher,
-		gitRepos:  gitRepos,
+		skillsDir:       skillsDir,
+		searcher:        searcher,
+		gitRepos:        gitRepos,
+		excludePatterns: cfg.excludePatterns,
 	}
 
 	// Initial index build
@@ -172,6 +190,10 @@ func (m *FileSystemManager) ListSkills() ([]Skill, error) {
 			skillName = filepath.Base(skillDir)
 		}
 
+		if m.IsExcluded(skillName) {
+			continue
+		}
+
 		skill, err := m.readSkillFromPath(skillPath, skillName, isReadOnly)
 		if err != nil {
 			// Skip skills that can't be read
@@ -244,6 +266,10 @@ func (m *FileSystemManager) findSkillDirByName(basePath, targetName string) (str
 
 // ReadSkill reads a skill by name (supports both local skills and git repo skills with repoName/skillName format)
 func (m *FileSystemManager) ReadSkill(name string) (*Skill, error) {
+	if m.IsExcluded(name) {
+		return nil, fmt.Errorf("skill not found: %s", name)
+	}
+
 	// Check if this is a git repo skill (format: repoName/skillName)
 	if strings.Contains(name, "/") {
 		parts := strings.Split(name, "/")
@@ -322,6 +348,10 @@ func (m *FileSystemManager) UpdateGitRepos(gitRepoNames []string) {
 
 // getSkillPath returns the full path to a skill directory given its ID
 func (m *FileSystemManager) getSkillPath(skillID string) (string, error) {
+	if m.IsExcluded(skillID) {
+		return "", fmt.Errorf("skill not found: %s", skillID)
+	}
+
 	// Check if this is a git repo skill (format: repoName/skillName)
 	if strings.Contains(skillID, "/") {
 		parts := strings.Split(skillID, "/")
