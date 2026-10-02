@@ -88,12 +88,14 @@ func main() {
 	}
 	// Logging defaults to false (disabled) to avoid interfering with MCP stdio
 	defaultEnableLogging := getEnvBool("SKILLSERVER_ENABLE_LOGGING", false)
+	defaultExcludeSkills := getEnvOrEmpty(domain.ExcludeSkillsEnv)
 
 	// Parse command line flags (flags override environment variables)
 	skillsDir := flag.String("dir", defaultDir, "Directory to store skills (env: SKILLSERVER_DIR or SKILLS_DIR)")
 	port := flag.String("port", defaultPort, "Port for the web server (env: SKILLSERVER_PORT or PORT)")
 	gitReposFlag := flag.String("git-repos", defaultGitRepos, "Comma-separated list of Git repository URLs to sync (env: SKILLSERVER_GIT_REPOS or GIT_REPOS)")
 	enableLogging := flag.Bool("enable-logging", defaultEnableLogging, "Enable logging to stderr (env: SKILLSERVER_ENABLE_LOGGING). Default: false (disabled to avoid interfering with MCP stdio)")
+	excludeSkillsFlag := flag.String("exclude-skills", defaultExcludeSkills, "Comma-separated glob patterns of skill names to hide, e.g. \"superpowers/using-superpowers\" (env: SKILLSERVER_EXCLUDE_SKILLS)")
 	flag.Parse()
 
 	// Setup logger based on flag
@@ -160,7 +162,8 @@ func main() {
 	}
 
 	// Initialize skill manager
-	skillManager, err := domain.NewFileSystemManager(finalDir, gitRepoNames)
+	skillManager, err := domain.NewFileSystemManager(finalDir, gitRepoNames,
+		domain.WithExcludedSkills(domain.ParseExcludedSkills(*excludeSkillsFlag)...))
 	if err != nil {
 		log.Fatalf("Failed to initialize skill manager: %v", err)
 	}

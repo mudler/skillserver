@@ -43,6 +43,7 @@ SkillServer supports both **environment variables** and **command-line flags**. 
 | `SKILLSERVER_PORT` | `PORT` | `8080` | Port for the web server |
 | `SKILLSERVER_GIT_REPOS` | `GIT_REPOS` | (empty) | Comma-separated Git repository URLs |
 | `SKILLSERVER_ENABLE_LOGGING` | (none) | `false` | Enable logging to stderr (default: false to avoid interfering with MCP stdio) |
+| `SKILLSERVER_EXCLUDE_SKILLS` | (none) | (empty) | Comma-separated glob patterns of skill names to hide (see [Excluding Skills](#excluding-skills)) |
 
 ### Command-Line Flags
 
@@ -52,6 +53,7 @@ SkillServer supports both **environment variables** and **command-line flags**. 
 | `--port` | Port for the web server (overrides `SKILLSERVER_PORT` or `PORT`) |
 | `--git-repos` | Comma-separated list of Git repository URLs (overrides `SKILLSERVER_GIT_REPOS` or `GIT_REPOS`) |
 | `--enable-logging` | Enable logging to stderr (overrides `SKILLSERVER_ENABLE_LOGGING`). Default: false (disabled to avoid interfering with MCP stdio protocol) |
+| `--exclude-skills` | Comma-separated glob patterns of skill names to hide (overrides `SKILLSERVER_EXCLUDE_SKILLS`) |
 
 ## Usage
 
@@ -94,6 +96,33 @@ export SKILLSERVER_GIT_REPOS="https://github.com/user/repo1.git,https://github.c
 Note: there is no specific layout that the repository needs to follow. The only requirements is that in every skill you have a `SKILL.md` file, and that gets scanned automatically.
 
 See [here](https://github.com/anthropics/skills) for an example repository.
+
+### Excluding Skills
+
+A synced repository may contain skills you do not want to expose — for example a
+meta-skill that tells the model to invoke a skill before every answer. Git skills are
+read-only, and deleting files inside the clone would break the next pull. Instead, hide
+them by name:
+
+```bash
+# Hide one skill of the "superpowers" repository, keep the rest of the repo
+export SKILLSERVER_EXCLUDE_SKILLS="superpowers/using-superpowers"
+./skillserver
+
+# Same via flag; patterns use Go path.Match syntax ("*" does not cross "/")
+./skillserver --exclude-skills "superpowers/using-*,*/experimental-*"
+```
+
+Patterns are matched against the skill name as shown by `list_skills` (`skill-name` for
+local skills, `repoName/skillName` for git skills). Excluded skills do not appear in
+`list_skills` or `search_skills`, cannot be read via `read_skill` or the resource tools,
+and are not indexed. Files on disk are left untouched. An invalid pattern makes startup
+fail.
+
+When embedding the library, `domain.NewFileSystemManager` reads
+`SKILLSERVER_EXCLUDE_SKILLS` by default, so applications built on it honour the variable
+without extra code; pass `domain.WithExcludedSkills(...)` to set the patterns
+explicitly (this overrides the environment variable).
 
 ### Docker Usage
 
